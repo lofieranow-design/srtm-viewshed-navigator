@@ -108,56 +108,74 @@ export function suggestRelayPositions(
 ): { lat: number; lng: number; elevation: number; distance: number; reason: string }[] {
   if (profile.length < 3) return [];
 
-  const startElev = profile[0].elevation + antennaHeight1;
-  const endElev = profile[profile.length - 1].elevation + antennaHeight2;
-  const totalDist = profile[profile.length - 1].distance;
+  const relayAntennaHeight = 10; // assumed relay antenna height
 
-  // Find points that actually block LOS and are local peaks
-  const obstacles: { index: number; clearance: number }[] = [];
+  // For each candidate point, check if it has LOS to BOTH endpoints
+  const candidates: { index: number; score: number; seesFrom: boolean; seesTo: boolean }[] = [];
 
-  for (let i = 1; i < profile.length - 1; i++) {
-    const t = totalDist > 0 ? profile[i].distance / totalDist : 0;
-    const losElev = startElev + t * (endElev - startElev);
-    const clearance = profile[i].elevation - losElev;
+  for (let i = 2; i < profile.length - 2; i++) {
+    const seesFrom = checkVisibility(profile, 0, i, antennaHeight1, relayAntennaHeight);
+    const seesTo = checkVisibility(profile, i, profile.length - 1, relayAntennaHeight, antennaHeight2);
 
-    if (clearance > 0) {
-      // Check if local peak (higher than both neighbors)
-      if (profile[i].elevation >= profile[i - 1].elevation &&
-          profile[i].elevation >= profile[i + 1].elevation) {
-        obstacles.push({ index: i, clearance });
-      }
+    if (seesFrom && seesTo) {
+      // Score: prefer higher elevation + more central position
+      const centrality = 1 - Math.abs(2 * i / profile.length - 1);
+      const score = profile[i].elevation + centrality * 100;
+      candidates.push({ index: i, score, seesFrom, seesTo });
     }
   }
 
-  // If no local peaks found but there are obstacles, take the highest blocking point
-  if (obstacles.length === 0) {
-    let maxClearance = 0;
-    let maxIdx = -1;
-    for (let i = 1; i < profile.length - 1; i++) {
-      const t = totalDist > 0 ? profile[i].distance / totalDist : 0;
-      const losElev = startElev + t * (endElev - startElev);
-      const clearance = profile[i].elevation - losElev;
-      if (clearance > maxClearance) {
-        maxClearance = clearance;
-        maxIdx = i;
-      }
+  // Sort by score (best first)
+  candidates.sort((a, b) => b.score - a.score);
+
+  // Deduplicate: skip candidates too close to already selected ones
+  const suggestions: { lat: number; lng: number; elevation: number; distance: number; reason: string }[] = [];
+  const usedIndices = new Set<number>();
+
+  for (const c of candidates) {
+    if (suggestions.length >= 3) break;
+    let tooClose = false;
+    for (const used of usedIndices) {
+      if (Math.abs(c.index - used) < 4) { tooClose = true; break; }
     }
-    if (maxIdx >= 0) obstacles.push({ index: maxIdx, clearance: maxClearance });
-  }
+    if (tooClose) continue;
 
-  // Sort by clearance (worst obstacles first), take top 3
-  obstacles.sort((a, b) => b.clearance - a.clearance);
-
-  return obstacles.slice(0, 3).map((o) => {
-    const p = profile[o.index];
-    return {
+    const p = profile[c.index];
+    suggestions.push({
       lat: p.lat,
       lng: p.lng,
       elevation: p.elevation,
       distance: p.distance,
-      reason: `Obstacle culminant à ${p.elevation.toFixed(0)}m — dépasse la LOS de ${o.clearance.toFixed(1)}m`,
-    };
-  });
+      reason: `Altitude ${p.elevation.toFixed(0)}m — visibilité directe vers les 2 extrémités ✅`,
+    });
+    usedIndices.add(c.index);
+  }
+
+  // If no point sees both, find the best "sees one side" as fallback
+  if (suggestions.length === 0) {
+    let bestIdx = -1;
+    let bestElev = -Infinity;
+    for (let i = 2; i < profile.length - 2; i++) {
+      if (profile[i].elevation > bestElev) {
+        bestElev = profile[i].elevation;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) {
+      const p = profile[bestIdx];
+      const seesFrom = checkVisibility(profile, 0, bestIdx, antennaHeight1, relayAntennaHeight);
+      const seesTo = checkVisibility(profile, bestIdx, profile.length - 1, relayAntennaHeight, antennaHeight2);
+      suggestions.push({
+        lat: p.lat,
+        lng: p.lng,
+        elevation: p.elevation,
+        distance: p.distance,
+        reason: `Point le plus élevé (${p.elevation.toFixed(0)}m) — ${seesFrom ? '✅ voit source' : '❌ ne voit pas source'}, ${seesTo ? '✅ voit destination' : '❌ ne voit pas destination'}`,
+      });
+    }
+  }
+
+  return suggestions;
 }
 
 function checkVisibility(
