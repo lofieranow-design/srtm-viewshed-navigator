@@ -88,3 +88,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+.station-tooltip {
+  background: white !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+.station-tooltip .leaflet-tooltip-tip {
+  border-top-color: white !important;
+}
