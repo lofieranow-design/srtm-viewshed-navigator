@@ -99,9 +99,23 @@ export default function TacticalMap({
       } else {
         marker.setLatLng([point.lat, point.lng]);
       }
-      marker.bindPopup(
-        `<div style="font-size:12px"><strong>${point.name}</strong><br/>Type: ${STATION_LABELS[point.type]}<br/>Lat: ${point.lat.toFixed(5)}<br/>Lng: ${point.lng.toFixed(5)}<br/>Antenne: ${point.antennaHeight}m</div>`
-      );
+      const tooltipContent = `
+        <table style="border-collapse:collapse;font-size:12px;min-width:180px;">
+          <tr style="background:#1e293b;color:white;">
+            <th colspan="2" style="padding:6px 10px;text-align:left;border-radius:4px 4px 0 0;">${point.name}</th>
+          </tr>
+          <tr><td style="padding:4px 10px;font-weight:600;color:#64748b;">Type</td><td style="padding:4px 10px;">${STATION_LABELS[point.type]}</td></tr>
+          <tr style="background:#f8fafc;"><td style="padding:4px 10px;font-weight:600;color:#64748b;">Latitude</td><td style="padding:4px 10px;">${point.lat.toFixed(5)}</td></tr>
+          <tr><td style="padding:4px 10px;font-weight:600;color:#64748b;">Longitude</td><td style="padding:4px 10px;">${point.lng.toFixed(5)}</td></tr>
+          <tr style="background:#f8fafc;"><td style="padding:4px 10px;font-weight:600;color:#64748b;">Antenne</td><td style="padding:4px 10px;">${point.antennaHeight} m</td></tr>
+        </table>`;
+      marker.unbindTooltip();
+      marker.bindTooltip(tooltipContent, {
+        direction: 'top',
+        offset: [0, -16],
+        opacity: 1,
+        className: 'station-tooltip',
+      });
     });
   }, [points, onPointDrag]);
 
