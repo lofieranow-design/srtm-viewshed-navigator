@@ -78,11 +78,17 @@ export default function TacticalMap({
     points.forEach((point) => {
       let marker = markersRef.current.get(point.id);
       if (!marker) {
+        const symbolMap: Record<string, string> = {
+          pc_principal: `<svg viewBox="0 0 32 32" width="32" height="32"><rect x="4" y="4" width="24" height="24" fill="${STATION_COLORS[point.type]}" stroke="white" stroke-width="3" rx="3"/><text x="16" y="21" text-anchor="middle" fill="white" font-size="14" font-weight="bold">P</text></svg>`,
+          pc_harpon: `<svg viewBox="0 0 32 32" width="32" height="32"><polygon points="16,2 30,26 2,26" fill="${STATION_COLORS[point.type]}" stroke="white" stroke-width="3"/><text x="16" y="23" text-anchor="middle" fill="white" font-size="12" font-weight="bold">H</text></svg>`,
+          relais: `<svg viewBox="0 0 32 32" width="32" height="32"><polygon points="16,2 30,16 16,30 2,16" fill="${STATION_COLORS[point.type]}" stroke="white" stroke-width="3"/><text x="16" y="21" text-anchor="middle" fill="white" font-size="12" font-weight="bold">R</text></svg>`,
+          observation: `<svg viewBox="0 0 32 32" width="32" height="32"><circle cx="16" cy="16" r="13" fill="${STATION_COLORS[point.type]}" stroke="white" stroke-width="3"/><circle cx="16" cy="16" r="5" fill="none" stroke="white" stroke-width="2"/></svg>`,
+        };
         const icon = L.divIcon({
           className: 'custom-marker',
-          html: `<div style="width:28px;height:28px;border-radius:50%;background:${STATION_COLORS[point.type]};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          html: symbolMap[point.type] || symbolMap.observation,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
         });
         marker = L.marker([point.lat, point.lng], { icon, draggable: true }).addTo(map);
         marker.on('dragend', () => {
