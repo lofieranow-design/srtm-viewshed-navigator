@@ -64,6 +64,23 @@ export default function ElevationProfile({ result, points, onClose }: ElevationP
           strokeWidth="1.5"
           strokeDasharray={result.visible ? '' : '5 3'}
         />
+        {/* Relay suggestions */}
+        {!result.visible && result.suggestions?.map((s, i) => {
+          const sx = toX(s.distance);
+          const sy = toY(s.elevation);
+          return (
+            <g key={i}>
+              <line x1={sx} y1={sy} x2={sx} y2={chartH} stroke="hsl(37, 91%, 55%)" strokeWidth="1" strokeDasharray="3 2" />
+              <polygon
+                points={`${sx},${sy - 8} ${sx - 5},${sy} ${sx + 5},${sy}`}
+                fill="hsl(37, 91%, 55%)"
+              />
+              <text x={sx} y={sy - 11} textAnchor="middle" fill="hsl(37, 91%, 55%)" fontSize="8" fontWeight="bold">
+                R{i + 1}
+              </text>
+            </g>
+          );
+        })}
         {/* Start/End markers */}
         <circle cx={toX(0)} cy={toY(profile[0].elevation)} r="4" fill="hsl(217, 91%, 60%)" />
         <circle
