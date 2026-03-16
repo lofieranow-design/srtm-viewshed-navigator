@@ -103,56 +103,61 @@ export function calculateLineOfSight(
 
 export function suggestRelayPositions(
   profile: { distance: number; elevation: number; lat: number; lng: number }[],
-  antennaHeight: number
+  antennaHeight1: number,
+  antennaHeight2: number
 ): { lat: number; lng: number; elevation: number; distance: number; reason: string }[] {
   if (profile.length < 3) return [];
 
-  // Find candidate high points along the line
-  const candidates: { index: number; score: number }[] = [];
+  const startElev = profile[0].elevation + antennaHeight1;
+  const endElev = profile[profile.length - 1].elevation + antennaHeight2;
+  const totalDist = profile[profile.length - 1].distance;
 
-  for (let i = 2; i < profile.length - 2; i++) {
-    const elev = profile[i].elevation;
-    // Score = how high relative to neighbors + how central
-    const neighborAvg = (profile[i - 1].elevation + profile[i + 1].elevation) / 2;
-    const prominence = elev - neighborAvg;
-    const centrality = 1 - Math.abs(2 * i / profile.length - 1); // higher near center
-    
-    if (prominence >= 0) {
-      candidates.push({ index: i, score: elev + prominence * 2 + centrality * 50 });
+  // Find points that actually block LOS and are local peaks
+  const obstacles: { index: number; clearance: number }[] = [];
+
+  for (let i = 1; i < profile.length - 1; i++) {
+    const t = totalDist > 0 ? profile[i].distance / totalDist : 0;
+    const losElev = startElev + t * (endElev - startElev);
+    const clearance = profile[i].elevation - losElev;
+
+    if (clearance > 0) {
+      // Check if local peak (higher than both neighbors)
+      if (profile[i].elevation >= profile[i - 1].elevation &&
+          profile[i].elevation >= profile[i + 1].elevation) {
+        obstacles.push({ index: i, clearance });
+      }
     }
   }
 
-  candidates.sort((a, b) => b.score - a.score);
-
-  const suggestions: { lat: number; lng: number; elevation: number; distance: number; reason: string }[] = [];
-  const usedIndices = new Set<number>();
-
-  for (const c of candidates) {
-    if (suggestions.length >= 3) break;
-    // Avoid suggestions too close to each other
-    let tooClose = false;
-    for (const used of usedIndices) {
-      if (Math.abs(c.index - used) < 5) { tooClose = true; break; }
+  // If no local peaks found but there are obstacles, take the highest blocking point
+  if (obstacles.length === 0) {
+    let maxClearance = 0;
+    let maxIdx = -1;
+    for (let i = 1; i < profile.length - 1; i++) {
+      const t = totalDist > 0 ? profile[i].distance / totalDist : 0;
+      const losElev = startElev + t * (endElev - startElev);
+      const clearance = profile[i].elevation - losElev;
+      if (clearance > maxClearance) {
+        maxClearance = clearance;
+        maxIdx = i;
+      }
     }
-    if (tooClose) continue;
+    if (maxIdx >= 0) obstacles.push({ index: maxIdx, clearance: maxClearance });
+  }
 
-    const p = profile[c.index];
-    const canSeeFrom = checkVisibility(profile, 0, c.index, antennaHeight, antennaHeight);
-    const canSeeTo = checkVisibility(profile, c.index, profile.length - 1, antennaHeight, antennaHeight);
+  // Sort by clearance (worst obstacles first), take top 3
+  obstacles.sort((a, b) => b.clearance - a.clearance);
 
-    suggestions.push({
+  return obstacles.slice(0, 3).map((o) => {
+    const p = profile[o.index];
+    return {
       lat: p.lat,
       lng: p.lng,
       elevation: p.elevation,
       distance: p.distance,
-      reason: canSeeFrom && canSeeTo
-        ? `Point culminant (${p.elevation.toFixed(0)}m) — visibilité vers les 2 extrémités`
-        : `Point élevé (${p.elevation.toFixed(0)}m) — vérification recommandée`,
-    });
-    usedIndices.add(c.index);
-  }
-
-  return suggestions;
+      reason: `Obstacle culminant à ${p.elevation.toFixed(0)}m — dépasse la LOS de ${o.clearance.toFixed(1)}m`,
+    };
+  });
 }
 
 function checkVisibility(
