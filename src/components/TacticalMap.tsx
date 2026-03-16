@@ -127,6 +127,8 @@ export default function TacticalMap({
 
     linesRef.current.forEach((l) => l.remove());
     linesRef.current = [];
+    suggestionsRef.current.forEach((m) => m.remove());
+    suggestionsRef.current = [];
 
     viewshedResults.forEach((result) => {
       const from = points.find((p) => p.id === result.fromId);
@@ -141,6 +143,37 @@ export default function TacticalMap({
         }
       ).addTo(map);
       linesRef.current.push(line);
+
+      // Add relay suggestion markers on obstacle peaks
+      if (!result.visible && result.suggestions) {
+        result.suggestions.forEach((s, i) => {
+          const icon = L.divIcon({
+            className: 'custom-marker',
+            html: `<svg viewBox="0 0 32 40" width="28" height="35"><polygon points="16,0 30,24 2,24" fill="#f59e0b" stroke="white" stroke-width="2.5"/><text x="16" y="19" text-anchor="middle" fill="white" font-size="13" font-weight="bold">${i + 1}</text><circle cx="16" cy="35" r="3" fill="#f59e0b" opacity="0.4"/></svg>`,
+            iconSize: [28, 35],
+            iconAnchor: [14, 35],
+          });
+          const marker = L.marker([s.lat, s.lng], { icon }).addTo(map);
+          const tooltipHtml = `
+            <table style="border-collapse:collapse;font-size:12px;min-width:200px;">
+              <tr style="background:#f59e0b;color:white;">
+                <th colspan="2" style="padding:6px 10px;text-align:left;border-radius:4px 4px 0 0;">📍 Relais suggéré ${i + 1}</th>
+              </tr>
+              <tr><td style="padding:4px 10px;font-weight:600;color:#64748b;">Altitude</td><td style="padding:4px 10px;">${s.elevation.toFixed(0)} m</td></tr>
+              <tr style="background:#f8fafc;"><td style="padding:4px 10px;font-weight:600;color:#64748b;">Latitude</td><td style="padding:4px 10px;">${s.lat.toFixed(5)}</td></tr>
+              <tr><td style="padding:4px 10px;font-weight:600;color:#64748b;">Longitude</td><td style="padding:4px 10px;">${s.lng.toFixed(5)}</td></tr>
+              <tr style="background:#f8fafc;"><td style="padding:4px 10px;font-weight:600;color:#64748b;">Distance</td><td style="padding:4px 10px;">${(s.distance / 1000).toFixed(2)} km</td></tr>
+              <tr><td colspan="2" style="padding:6px 10px;font-style:italic;color:#92400e;font-size:11px;">${s.reason}</td></tr>
+            </table>`;
+          marker.bindTooltip(tooltipHtml, {
+            direction: 'top',
+            offset: [0, -35],
+            opacity: 1,
+            className: 'station-tooltip',
+          });
+          suggestionsRef.current.push(marker);
+        });
+      }
     });
   }, [viewshedResults, points]);
 
