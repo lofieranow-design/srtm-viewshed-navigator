@@ -9,12 +9,21 @@ export interface TacticalPoint {
   antennaHeight: number;
 }
 
+export interface RelaySuggestion {
+  lat: number;
+  lng: number;
+  elevation: number;
+  distance: number;
+  reason: string;
+}
+
 export interface ViewshedResult {
   fromId: string;
   toId: string;
   visible: boolean;
-  elevationProfile: { distance: number; elevation: number }[];
+  elevationProfile: { distance: number; elevation: number; lat: number; lng: number }[];
   losLine: { distance: number; elevation: number }[];
+  suggestions: RelaySuggestion[];
 }
 
 export const STATION_LABELS: Record<StationType, string> = {

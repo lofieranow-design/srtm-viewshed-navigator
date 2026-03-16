@@ -57,11 +57,11 @@ export async function getElevationProfile(
 }
 
 export function calculateLineOfSight(
-  profile: { distance: number; elevation: number }[],
+  profile: { distance: number; elevation: number; lat: number; lng: number }[],
   antennaHeight1: number,
   antennaHeight2: number
-): { visible: boolean; losLine: { distance: number; elevation: number }[] } {
-  if (profile.length < 2) return { visible: false, losLine: [] };
+): { visible: boolean; losLine: { distance: number; elevation: number }[]; obstaclePeaks: { index: number; clearance: number }[] } {
+  if (profile.length < 2) return { visible: false, losLine: [], obstaclePeaks: [] };
 
   const startElev = profile[0].elevation + antennaHeight1;
   const endElev = profile[profile.length - 1].elevation + antennaHeight2;
@@ -76,14 +76,103 @@ export function calculateLineOfSight(
   });
 
   let visible = true;
+  const obstaclePeaks: { index: number; clearance: number }[] = [];
+
   for (let i = 1; i < profile.length - 1; i++) {
     const t = totalDist > 0 ? profile[i].distance / totalDist : 0;
     const losElev = startElev + t * (endElev - startElev);
-    if (profile[i].elevation > losElev) {
+    const clearance = profile[i].elevation - losElev;
+    if (clearance > 0) {
       visible = false;
-      break;
+      // Check if this is a local peak (higher than neighbors)
+      const prevElev = profile[i - 1].elevation;
+      const nextElev = profile[i + 1]?.elevation ?? 0;
+      if (profile[i].elevation >= prevElev && profile[i].elevation >= nextElev) {
+        obstaclePeaks.push({ index: i, clearance });
+      }
     }
   }
 
-  return { visible, losLine };
+  // Deduplicate: keep only the highest peak per obstacle cluster
+  const filteredPeaks = obstaclePeaks
+    .sort((a, b) => b.clearance - a.clearance)
+    .slice(0, 3);
+
+  return { visible, losLine, obstaclePeaks: filteredPeaks };
+}
+
+export function suggestRelayPositions(
+  profile: { distance: number; elevation: number; lat: number; lng: number }[],
+  antennaHeight: number
+): { lat: number; lng: number; elevation: number; distance: number; reason: string }[] {
+  if (profile.length < 3) return [];
+
+  // Find candidate high points along the line
+  const candidates: { index: number; score: number }[] = [];
+
+  for (let i = 2; i < profile.length - 2; i++) {
+    const elev = profile[i].elevation;
+    // Score = how high relative to neighbors + how central
+    const neighborAvg = (profile[i - 1].elevation + profile[i + 1].elevation) / 2;
+    const prominence = elev - neighborAvg;
+    const centrality = 1 - Math.abs(2 * i / profile.length - 1); // higher near center
+    
+    if (prominence >= 0) {
+      candidates.push({ index: i, score: elev + prominence * 2 + centrality * 50 });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+
+  const suggestions: { lat: number; lng: number; elevation: number; distance: number; reason: string }[] = [];
+  const usedIndices = new Set<number>();
+
+  for (const c of candidates) {
+    if (suggestions.length >= 3) break;
+    // Avoid suggestions too close to each other
+    let tooClose = false;
+    for (const used of usedIndices) {
+      if (Math.abs(c.index - used) < 5) { tooClose = true; break; }
+    }
+    if (tooClose) continue;
+
+    const p = profile[c.index];
+    const canSeeFrom = checkVisibility(profile, 0, c.index, antennaHeight, antennaHeight);
+    const canSeeTo = checkVisibility(profile, c.index, profile.length - 1, antennaHeight, antennaHeight);
+
+    suggestions.push({
+      lat: p.lat,
+      lng: p.lng,
+      elevation: p.elevation,
+      distance: p.distance,
+      reason: canSeeFrom && canSeeTo
+        ? `Point culminant (${p.elevation.toFixed(0)}m) — visibilité vers les 2 extrémités`
+        : `Point élevé (${p.elevation.toFixed(0)}m) — vérification recommandée`,
+    });
+    usedIndices.add(c.index);
+  }
+
+  return suggestions;
+}
+
+function checkVisibility(
+  profile: { distance: number; elevation: number }[],
+  fromIdx: number,
+  toIdx: number,
+  h1: number,
+  h2: number
+): boolean {
+  const startElev = profile[fromIdx].elevation + h1;
+  const endElev = profile[toIdx].elevation + h2;
+  const startDist = profile[fromIdx].distance;
+  const endDist = profile[toIdx].distance;
+  const totalDist = endDist - startDist;
+  if (totalDist <= 0) return true;
+
+  for (let i = fromIdx + 1; i < toIdx; i++) {
+    const t = (profile[i].distance - startDist) / totalDist;
+    const losElev = startElev + t * (endElev - startElev);
+    if (profile[i].elevation > losElev) return false;
+  }
+  return true;
 }

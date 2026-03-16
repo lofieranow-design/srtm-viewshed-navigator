@@ -81,12 +81,20 @@ export default function Index() {
 
         const { visible, losLine } = calculateLineOfSight(profile, from.antennaHeight, to.antennaHeight);
 
+        // Generate relay suggestions if not visible
+        let suggestions: import('@/types/tactical').RelaySuggestion[] = [];
+        if (!visible) {
+          const { suggestRelayPositions } = await import('@/lib/elevation');
+          suggestions = suggestRelayPositions(profile, 10);
+        }
+
         const result: ViewshedResult = {
           fromId,
           toId,
           visible,
           elevationProfile: profile,
           losLine,
+          suggestions,
         };
 
         setViewshedResults((prev) => {

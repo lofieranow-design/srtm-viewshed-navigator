@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Radio, Trash2, Plus, Eye, ChevronLeft, ChevronRight, Check, Navigation } from 'lucide-react';
+import { MapPin, Radio, Trash2, Plus, Eye, ChevronLeft, ChevronRight, Check, Navigation, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -264,6 +264,26 @@ export default function Sidebar({
                       {r.elevationProfile.length > 0 && (
                         <div className="text-muted-foreground">
                           Distance: {(r.elevationProfile[r.elevationProfile.length - 1].distance / 1000).toFixed(1)} km
+                        </div>
+                      )}
+                      {!r.visible && r.suggestions && r.suggestions.length > 0 && (
+                        <div className="mt-2 space-y-1.5 border-t border-destructive/20 pt-2">
+                          <div className="flex items-center gap-1 text-xs font-semibold text-primary">
+                            <Lightbulb className="h-3 w-3" />
+                            Positions relais suggérées
+                          </div>
+                          {r.suggestions.map((s, j) => (
+                            <div key={j} className="rounded bg-background border border-border p-2 text-xs space-y-0.5">
+                              <div className="font-medium">📍 Relais suggéré {j + 1}</div>
+                              <div className="text-muted-foreground">
+                                Alt: {s.elevation.toFixed(0)}m — Dist: {(s.distance / 1000).toFixed(1)}km
+                              </div>
+                              <div className="text-muted-foreground">
+                                Lat: {s.lat.toFixed(5)}, Lng: {s.lng.toFixed(5)}
+                              </div>
+                              <div className="text-xs text-primary/80 italic">{s.reason}</div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
