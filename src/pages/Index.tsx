@@ -85,7 +85,7 @@ export default function Index() {
         let suggestions: import('@/types/tactical').RelaySuggestion[] = [];
         if (!visible) {
           const { suggestRelayPositions } = await import('@/lib/elevation');
-          suggestions = suggestRelayPositions(profile, 10);
+          suggestions = suggestRelayPositions(profile, from.antennaHeight, to.antennaHeight);
         }
 
         const result: ViewshedResult = {
