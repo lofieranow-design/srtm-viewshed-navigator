@@ -24,6 +24,7 @@ export default function TacticalMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const linesRef = useRef<L.Polyline[]>([]);
+  const suggestionsRef = useRef<L.Marker[]>([]);
 
   // Initialize map
   useEffect(() => {
