@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Radio, Trash2, Plus, Eye, ChevronLeft, ChevronRight, Check, Navigation } from 'lucide-react';
+import { MapPin, Radio, Trash2, Plus, Eye, ChevronLeft, ChevronRight, Check, Navigation, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
