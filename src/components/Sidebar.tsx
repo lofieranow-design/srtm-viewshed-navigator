@@ -1,9 +1,17 @@
 import { useState } from 'react';
-import { MapPin, Radio, Trash2, Plus, ChevronDown, Move, Eye } from 'lucide-react';
+import { MapPin, Radio, Trash2, Plus, Eye, ChevronLeft, ChevronRight, Check, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TacticalPoint, StationType, STATION_LABELS, STATION_COLORS, ViewshedResult } from '@/types/tactical';
+
+const STEPS = [
+  { title: 'Bienvenue', icon: Navigation, description: 'Introduction à l\'analyse terrain' },
+  { title: 'Placer les stations', icon: MapPin, description: 'Positionnez vos points tactiques sur la carte' },
+  { title: 'Configurer', icon: Radio, description: 'Ajustez les paramètres des antennes' },
+  { title: 'Analyser', icon: Radio, description: 'Lancez l\'analyse de visibilité radio' },
+  { title: 'Résultats', icon: Check, description: 'Consultez les résultats de l\'analyse' },
+];
 
 interface SidebarProps {
   points: TacticalPoint[];
@@ -34,219 +42,302 @@ export default function Sidebar({
   onCenterOnPoint,
   isAnalyzing,
 }: SidebarProps) {
+  const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState<StationType>('pc_principal');
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
 
-  return (
-    <div className="flex h-full w-80 flex-col border-r border-border bg-card overflow-y-auto">
-      {/* Header */}
-      <div className="border-b border-border bg-sidebar p-4">
-        <h1 className="text-lg font-bold text-sidebar-foreground flex items-center gap-2">
-          <Radio className="h-5 w-5 text-primary" />
-          Analyse Terrain
-        </h1>
-        <p className="text-xs text-sidebar-foreground/60 mt-1">
-          QGIS / SRTM — Visibilité Radio
-        </p>
-      </div>
+  const canNext = () => {
+    if (step === 1) return points.length >= 2;
+    if (step === 3) return viewshedResults.length > 0 || isAnalyzing;
+    return true;
+  };
 
-      {/* Add Point */}
-      <div className="border-b border-border p-4 space-y-3">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <MapPin className="h-4 w-4" />
-          Stations Tactiques
-        </h2>
-
-        <div className="flex gap-2">
-          <Select value={selectedType} onValueChange={(v) => setSelectedType(v as StationType)}>
-            <SelectTrigger className="flex-1 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
+  const renderStep = () => {
+    switch (step) {
+      case 0:
+        return (
+          <div className="space-y-4 p-1">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <h3 className="text-sm font-semibold">Procédure d'analyse terrain</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Cette application vous permet d'effectuer une analyse de visibilité radio
+                basée sur les données d'élévation réelles (SRTM 30m).
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>Placez vos stations tactiques sur la carte</li>
+                <li>Configurez les hauteurs d'antenne</li>
+                <li>Analysez la visibilité entre les points</li>
+                <li>Consultez le profil d'élévation et les résultats</li>
+              </ol>
+            </div>
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Types de stations</h4>
               {(Object.keys(STATION_LABELS) as StationType[]).map((t) => (
-                <SelectItem key={t} value={t}>
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-full"
-                      style={{ background: STATION_COLORS[t] }}
-                    />
-                    {STATION_LABELS[t]}
-                  </span>
-                </SelectItem>
+                <div key={t} className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full" style={{ background: STATION_COLORS[t] }} />
+                  <span>{STATION_LABELS[t]}</span>
+                </div>
               ))}
-            </SelectContent>
-          </Select>
-
-          {isPlacing ? (
-            <Button size="sm" variant="destructive" onClick={onCancelPlacing} className="text-xs h-8">
-              Annuler
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => onStartPlacing(selectedType)} className="text-xs h-8">
-              <Plus className="h-3 w-3 mr-1" />
-              Placer
-            </Button>
-          )}
-        </div>
-
-        {isPlacing && (
-          <p className="text-xs text-primary animate-pulse">
-            👆 Cliquez sur la carte pour placer {STATION_LABELS[placingType]}
-          </p>
-        )}
-      </div>
-
-      {/* Points List */}
-      <div className="border-b border-border p-4 space-y-2 flex-1 min-h-0 overflow-y-auto">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Points ({points.length})
-        </h3>
-
-        {points.length === 0 && (
-          <p className="text-xs text-muted-foreground py-4 text-center">
-            Aucun point placé. Sélectionnez un type et cliquez "Placer".
-          </p>
-        )}
-
-        {points.map((point) => (
-          <div
-            key={point.id}
-            className="rounded-md border border-border bg-background p-3 space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-full"
-                  style={{ background: STATION_COLORS[point.type] }}
-                />
-                <Input
-                  value={point.name}
-                  onChange={(e) => onUpdatePoint(point.id, { name: e.target.value })}
-                  className="h-6 text-xs font-medium border-0 p-0 bg-transparent"
-                />
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => onCenterOnPoint(point)}
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6 text-destructive"
-                  onClick={() => onDeletePoint(point.id)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <span>Lat: {point.lat.toFixed(4)}</span>
-              <span>Lng: {point.lng.toFixed(4)}</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Antenne (m):</label>
-              <Input
-                type="number"
-                value={point.antennaHeight}
-                onChange={(e) =>
-                  onUpdatePoint(point.id, { antennaHeight: Number(e.target.value) })
-                }
-                className="h-6 w-16 text-xs"
-                min={1}
-                max={100}
-              />
             </div>
           </div>
-        ))}
-      </div>
+        );
 
-      {/* Viewshed Analysis */}
-      <div className="p-4 space-y-3">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Radio className="h-4 w-4" />
-          Analyse de Visibilité
-        </h2>
-
-        {points.length < 2 ? (
-          <p className="text-xs text-muted-foreground">
-            Placez au moins 2 points pour analyser la visibilité.
-          </p>
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Select value={fromId} onValueChange={setFromId}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Point de départ" />
+      case 1:
+        return (
+          <div className="space-y-4 p-1">
+            <div className="flex gap-2">
+              <Select value={selectedType} onValueChange={(v) => setSelectedType(v as StationType)}>
+                <SelectTrigger className="flex-1 h-9 text-xs">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {points.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
+                  {(Object.keys(STATION_LABELS) as StationType[]).map((t) => (
+                    <SelectItem key={t} value={t}>
+                      <span className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: STATION_COLORS[t] }} />
+                        {STATION_LABELS[t]}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-
-              <Select value={toId} onValueChange={setToId}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Point d'arrivée" />
-                </SelectTrigger>
-                <SelectContent>
-                  {points.filter((p) => p.id !== fromId).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button
-                className="w-full text-xs h-8"
-                disabled={!fromId || !toId || isAnalyzing}
-                onClick={() => onRunViewshed(fromId, toId)}
-              >
-                {isAnalyzing ? 'Analyse en cours...' : 'Analyser la visibilité'}
-              </Button>
+              {isPlacing ? (
+                <Button size="sm" variant="destructive" onClick={onCancelPlacing} className="text-xs h-9">
+                  Annuler
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => onStartPlacing(selectedType)} className="text-xs h-9">
+                  <Plus className="h-3 w-3 mr-1" /> Placer
+                </Button>
+              )}
             </div>
 
-            {viewshedResults.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase">Résultats</h3>
-                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={onClearViewshed}>
-                    Effacer
-                  </Button>
+            {isPlacing && (
+              <p className="text-xs text-primary animate-pulse">
+                👆 Cliquez sur la carte pour placer {STATION_LABELS[placingType]}
+              </p>
+            )}
+
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Points placés ({points.length})
+              </h3>
+              {points.length === 0 && (
+                <p className="text-xs text-muted-foreground py-3 text-center border border-dashed border-border rounded-md">
+                  Placez au moins 2 points pour continuer.
+                </p>
+              )}
+              {points.map((point) => (
+                <div key={point.id} className="flex items-center justify-between rounded-md border border-border bg-background p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: STATION_COLORS[point.type] }} />
+                    <span className="text-xs font-medium">{point.name}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onCenterOnPoint(point)}>
+                      <Eye className="h-3 w-3" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeletePoint(point.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 2:
+        return (
+          <div className="space-y-3 p-1">
+            {points.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">Aucun point à configurer.</p>
+            ) : (
+              points.map((point) => (
+                <div key={point.id} className="rounded-md border border-border bg-background p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ background: STATION_COLORS[point.type] }} />
+                    <Input
+                      value={point.name}
+                      onChange={(e) => onUpdatePoint(point.id, { name: e.target.value })}
+                      className="h-7 text-xs font-medium border-0 p-0 bg-transparent"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                    <span>Lat: {point.lat.toFixed(4)}</span>
+                    <span>Lng: {point.lng.toFixed(4)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground whitespace-nowrap">Hauteur antenne:</label>
+                    <Input
+                      type="number"
+                      value={point.antennaHeight}
+                      onChange={(e) => onUpdatePoint(point.id, { antennaHeight: Number(e.target.value) })}
+                      className="h-7 w-20 text-xs"
+                      min={1} max={100}
+                    />
+                    <span className="text-xs text-muted-foreground">m</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        );
+
+      case 3:
+        return (
+          <div className="space-y-3 p-1">
+            {points.length < 2 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Il faut au moins 2 points. Revenez à l'étape 2.
+              </p>
+            ) : (
+              <>
+                <Select value={fromId} onValueChange={setFromId}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Point de départ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {points.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={toId} onValueChange={setToId}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Point d'arrivée" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {points.filter((p) => p.id !== fromId).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  className="w-full text-xs h-9"
+                  disabled={!fromId || !toId || isAnalyzing}
+                  onClick={() => onRunViewshed(fromId, toId)}
+                >
+                  {isAnalyzing ? 'Analyse en cours...' : '🔍 Lancer l\'analyse'}
+                </Button>
+
+                {viewshedResults.length > 0 && (
+                  <p className="text-xs text-accent text-center">
+                    ✅ {viewshedResults.length} analyse(s) effectuée(s) — passez à l'étape suivante
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        );
+
+      case 4:
+        return (
+          <div className="space-y-3 p-1">
+            {viewshedResults.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Aucune analyse effectuée. Revenez à l'étape précédente.
+              </p>
+            ) : (
+              <>
                 {viewshedResults.map((r, i) => {
                   const from = points.find((p) => p.id === r.fromId);
                   const to = points.find((p) => p.id === r.toId);
                   return (
                     <div
                       key={i}
-                      className={`rounded-md border p-2 text-xs ${
+                      className={`rounded-md border p-3 text-xs space-y-1 ${
                         r.visible
-                          ? 'border-accent bg-accent/10 text-accent'
-                          : 'border-destructive bg-destructive/10 text-destructive'
+                          ? 'border-accent bg-accent/10'
+                          : 'border-destructive bg-destructive/10'
                       }`}
                     >
-                      <strong>{from?.name}</strong> → <strong>{to?.name}</strong>
-                      <br />
-                      {r.visible ? '✅ Liaison radio possible' : '❌ Obstacle détecté — relais requis'}
+                      <div className="font-semibold">
+                        {from?.name} → {to?.name}
+                      </div>
+                      <div className={r.visible ? 'text-accent' : 'text-destructive'}>
+                        {r.visible ? '✅ Liaison radio possible' : '❌ Obstacle détecté — relais requis'}
+                      </div>
+                      {r.elevationProfile.length > 0 && (
+                        <div className="text-muted-foreground">
+                          Distance: {(r.elevationProfile[r.elevationProfile.length - 1].distance / 1000).toFixed(1)} km
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-              </div>
+                <Button size="sm" variant="outline" className="w-full text-xs h-8" onClick={onClearViewshed}>
+                  Effacer les résultats
+                </Button>
+              </>
             )}
-          </>
-        )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex h-full w-80 flex-col border-r border-border bg-card">
+      {/* Header */}
+      <div className="border-b border-border bg-sidebar p-4">
+        <h1 className="text-lg font-bold text-sidebar-foreground flex items-center gap-2">
+          <Radio className="h-5 w-5 text-primary" />
+          Analyse Terrain
+        </h1>
+        <p className="text-xs text-sidebar-foreground/60 mt-1">Visibilité Radio — SRTM</p>
+      </div>
+
+      {/* Step indicator */}
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-primary">
+            Étape {step + 1}/{STEPS.length}
+          </span>
+          <span className="text-xs text-muted-foreground">{STEPS[step].title}</span>
+        </div>
+        <div className="flex gap-1">
+          {STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 flex-1 rounded-full transition-colors ${
+                i <= step ? 'bg-primary' : 'bg-border'
+              }`}
+            />
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">{STEPS[step].description}</p>
+      </div>
+
+      {/* Step content */}
+      <div className="flex-1 overflow-y-auto p-3">
+        {renderStep()}
+      </div>
+
+      {/* Navigation */}
+      <div className="border-t border-border p-3 flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 text-xs h-9"
+          disabled={step === 0}
+          onClick={() => setStep((s) => s - 1)}
+        >
+          <ChevronLeft className="h-3 w-3 mr-1" /> Précédent
+        </Button>
+        <Button
+          size="sm"
+          className="flex-1 text-xs h-9"
+          disabled={step === STEPS.length - 1 || !canNext()}
+          onClick={() => setStep((s) => s + 1)}
+        >
+          Suivant <ChevronRight className="h-3 w-3 ml-1" />
+        </Button>
       </div>
     </div>
   );
