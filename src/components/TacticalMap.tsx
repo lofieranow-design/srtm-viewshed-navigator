@@ -9,6 +9,7 @@ interface TacticalMapProps {
   isPlacing: boolean;
   onMapClick: (lat: number, lng: number) => void;
   onPointDrag: (id: string, lat: number, lng: number) => void;
+  onSuggestionClick: (lat: number, lng: number, elevation: number, fromId: string, toId: string) => void;
   centerOn: [number, number] | null;
 }
 
