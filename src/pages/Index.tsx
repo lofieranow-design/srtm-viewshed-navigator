@@ -1,13 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import { TacticalPoint, StationType, STATION_LABELS, ViewshedResult, LinkAnalysis } from '@/types/tactical';
-import { getElevationProfile, calculateLineOfSight, suggestRelayPositions } from '@/lib/elevation';
+import { getElevationProfile, calculateLineOfSight, suggestRelayPositions, findMinimalRelays } from '@/lib/elevation';
 import TacticalMap from '@/components/TacticalMap';
 import Sidebar from '@/components/Sidebar';
 import ElevationProfile from '@/components/ElevationProfile';
 import { toast } from '@/hooks/use-toast';
 
 let idCounter = 0;
-const MAX_RELAY_DEPTH = 5;
 
 export default function Index() {
   const [points, setPoints] = useState<TacticalPoint[]>([]);
@@ -66,86 +65,6 @@ export default function Index() {
     setViewshedResults((prev) => prev.filter((r) => r.fromId !== id && r.toId !== id));
   }, []);
 
-  /** Analyze a single segment and return the result */
-  const analyzeSegment = async (
-    fromPt: { lat: number; lng: number; antennaHeight: number; id: string },
-    toPt: { lat: number; lng: number; antennaHeight: number; id: string }
-  ): Promise<ViewshedResult | null> => {
-    const profile = await getElevationProfile(fromPt.lat, fromPt.lng, toPt.lat, toPt.lng, 50);
-    if (profile.length === 0) return null;
-
-    const { visible, losLine } = calculateLineOfSight(profile, fromPt.antennaHeight, toPt.antennaHeight);
-    const suggestions = visible ? [] : suggestRelayPositions(profile, fromPt.antennaHeight, toPt.antennaHeight);
-
-    return {
-      fromId: fromPt.id,
-      toId: toPt.id,
-      visible,
-      elevationProfile: profile,
-      losLine,
-      suggestions,
-    };
-  };
-
-  /** Recursively resolve a segment by placing relays until visible or max depth */
-  const resolveSegment = async (
-    fromPt: TacticalPoint,
-    toPt: TacticalPoint,
-    depth: number,
-    allNewPoints: TacticalPoint[],
-    allResults: ViewshedResult[],
-    allRelayIds: string[]
-  ): Promise<void> => {
-    const result = await analyzeSegment(fromPt, toPt);
-    if (!result) {
-      toast({ title: 'Erreur', description: `Impossible d'analyser ${fromPt.name} → ${toPt.name}`, variant: 'destructive' });
-      return;
-    }
-
-    if (result.visible) {
-      // Segment is clear
-      allResults.push(result);
-      setViewshedResults((prev) => [...prev, result]);
-      toast({ title: '✅ Segment OK', description: `${fromPt.name} → ${toPt.name}` });
-      return;
-    }
-
-    // Not visible — place the best relay suggestion
-    if (depth >= MAX_RELAY_DEPTH || result.suggestions.length === 0) {
-      // Can't resolve further, store result as-is
-      allResults.push(result);
-      setViewshedResults((prev) => [...prev, result]);
-      toast({
-        title: '❌ Impossible de résoudre',
-        description: `${fromPt.name} → ${toPt.name} — profondeur max atteinte`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Pick the best suggestion (first one — already sorted by score)
-    const bestSuggestion = result.suggestions[0];
-    const relayId = `point-${++idCounter}`;
-    const relayName = `Relais ${pointsRef.current.filter((p) => p.type === 'relais').length + allNewPoints.filter((p) => p.type === 'relais').length + 1}`;
-    const relayPoint: TacticalPoint = {
-      id: relayId,
-      name: relayName,
-      type: 'relais',
-      lat: bestSuggestion.lat,
-      lng: bestSuggestion.lng,
-      antennaHeight: 10,
-    };
-
-    allNewPoints.push(relayPoint);
-    allRelayIds.push(relayId);
-    setPoints((prev) => [...prev, relayPoint]);
-    toast({ title: '📍 Relais auto-placé', description: `${relayName} à ${bestSuggestion.elevation.toFixed(0)}m` });
-
-    // Recursively resolve: from → relay, then relay → to
-    await resolveSegment(fromPt, relayPoint, depth + 1, allNewPoints, allResults, allRelayIds);
-    await resolveSegment(relayPoint, toPt, depth + 1, allNewPoints, allResults, allRelayIds);
-  };
-
   const handleRunViewshed = useCallback(
     async (fromId: string, toId: string) => {
       const from = points.find((p) => p.id === fromId);
@@ -157,20 +76,29 @@ export default function Index() {
       setLinkAnalysis(null);
 
       try {
-        // Step 1: Direct analysis
-        const directResult = await analyzeSegment(from, to);
-        if (!directResult) {
+        // Step 1: Get full elevation profile and direct analysis
+        const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 100);
+        if (fullProfile.length === 0) {
           toast({ title: 'Erreur', description: "Impossible de récupérer les données d'élévation.", variant: 'destructive' });
           setIsAnalyzing(false);
           return;
         }
 
-        if (directResult.visible) {
+        const directLos = calculateLineOfSight(fullProfile, from.antennaHeight, to.antennaHeight);
+        const directSuggestions = directLos.visible ? [] : suggestRelayPositions(fullProfile, from.antennaHeight, to.antennaHeight);
+        const directResult: ViewshedResult = {
+          fromId, toId,
+          visible: directLos.visible,
+          elevationProfile: fullProfile,
+          losLine: directLos.losLine,
+          suggestions: directSuggestions,
+        };
+        setViewshedResults([directResult]);
+
+        if (directLos.visible) {
           // Direct link works!
-          setViewshedResults([directResult]);
           setLinkAnalysis({
-            sourceId: fromId,
-            destId: toId,
+            sourceId: fromId, destId: toId,
             directResult,
             segmentResults: [directResult],
             relayIds: [],
@@ -181,19 +109,79 @@ export default function Index() {
           return;
         }
 
-        // Step 2: Direct link blocked — auto-resolve with relays
-        toast({ title: '❌ Obstacle détecté', description: `Recherche automatique de relais...` });
+        // Step 2: Use greedy forward-scan to find minimum relays
+        toast({ title: '❌ Obstacle détecté', description: 'Recherche du nombre minimal de relais...' });
 
-        const allNewPoints: TacticalPoint[] = [];
-        const segmentResults: ViewshedResult[] = [];
+        const minRelays = findMinimalRelays(fullProfile, from.antennaHeight, to.antennaHeight, 5);
+
+        if (minRelays.length === 0) {
+          setLinkAnalysis({
+            sourceId: fromId, destId: toId,
+            directResult,
+            segmentResults: [directResult],
+            relayIds: [],
+            complete: false,
+          });
+          toast({ title: '❌ Aucun relais trouvé', description: 'Impossible de résoudre la liaison', variant: 'destructive' });
+          setIsAnalyzing(false);
+          return;
+        }
+
+        // Step 3: Place relay points
+        const relayPoints: TacticalPoint[] = [];
         const relayIds: string[] = [];
+        const existingRelayCount = pointsRef.current.filter((p) => p.type === 'relais').length;
 
-        await resolveSegment(from, to, 0, allNewPoints, segmentResults, relayIds);
+        for (let i = 0; i < minRelays.length; i++) {
+          const r = minRelays[i];
+          const relayId = `point-${++idCounter}`;
+          const relayName = `Relais ${existingRelayCount + i + 1}`;
+          const relayPoint: TacticalPoint = {
+            id: relayId,
+            name: relayName,
+            type: 'relais',
+            lat: r.lat,
+            lng: r.lng,
+            antennaHeight: 10,
+          };
+          relayPoints.push(relayPoint);
+          relayIds.push(relayId);
+        }
 
-        const allVisible = segmentResults.every((r) => r.visible);
+        setPoints((prev) => [...prev, ...relayPoints]);
+        toast({ title: `📍 ${relayPoints.length} relais placé(s)`, description: relayPoints.map((r) => r.name).join(', ') });
+
+        // Step 4: Analyze each segment of the chain
+        const chain: TacticalPoint[] = [from, ...relayPoints, to];
+        const segmentResults: ViewshedResult[] = [];
+        const allNewResults: ViewshedResult[] = [];
+
+        for (let i = 0; i < chain.length - 1; i++) {
+          const segFrom = chain[i];
+          const segTo = chain[i + 1];
+          const segProfile = await getElevationProfile(segFrom.lat, segFrom.lng, segTo.lat, segTo.lng, 50);
+
+          if (segProfile.length > 0) {
+            const segLos = calculateLineOfSight(segProfile, segFrom.antennaHeight, segTo.antennaHeight);
+            const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, segFrom.antennaHeight, segTo.antennaHeight);
+            const segResult: ViewshedResult = {
+              fromId: segFrom.id,
+              toId: segTo.id,
+              visible: segLos.visible,
+              elevationProfile: segProfile,
+              losLine: segLos.losLine,
+              suggestions: segSuggestions,
+            };
+            segmentResults.push(segResult);
+            allNewResults.push(segResult);
+          }
+        }
+
+        setViewshedResults([directResult, ...allNewResults]);
+        const allVisible = segmentResults.every((s) => s.visible);
+
         setLinkAnalysis({
-          sourceId: fromId,
-          destId: toId,
+          sourceId: fromId, destId: toId,
           directResult,
           segmentResults,
           relayIds,
@@ -201,13 +189,9 @@ export default function Index() {
         });
 
         if (allVisible) {
-          toast({ title: '✅ Liaison établie via relais', description: `${relayIds.length} relais placé(s)` });
+          toast({ title: '✅ Liaison établie', description: `${relayIds.length} relais — tous les segments visibles` });
         } else {
-          toast({
-            title: '⚠️ Liaison partiellement résolue',
-            description: `Certains segments restent bloqués`,
-            variant: 'destructive',
-          });
+          toast({ title: '⚠️ Partiellement résolu', description: 'Certains segments restent bloqués', variant: 'destructive' });
         }
       } catch {
         toast({ title: 'Erreur', description: "Échec de l'analyse.", variant: 'destructive' });
@@ -218,7 +202,7 @@ export default function Index() {
   );
 
   const handleSuggestionClick = useCallback(
-    async (lat: number, lng: number, elevation: number, fromId: string, toId: string) => {
+    async (lat: number, lng: number, _elevation: number, _fromId: string, _toId: string) => {
       const relayId = `point-${++idCounter}`;
       const relayName = `Relais ${points.filter((p) => p.type === 'relais').length + 1}`;
       const newRelay: TacticalPoint = {
