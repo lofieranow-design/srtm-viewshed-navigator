@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { TacticalPoint, STATION_COLORS, STATION_LABELS, ViewshedResult } from '@/types/tactical';
-import { ContourLine } from '@/lib/contours';
+import { ContourLine, ElevationGrid } from '@/lib/contours';
 
 interface TacticalMapProps {
   points: TacticalPoint[];
@@ -17,6 +17,8 @@ interface TacticalMapProps {
   onContourRectangle: (bounds: { north: number; south: number; east: number; west: number }) => void;
   contourLines: ContourLine[];
   showContourLabels: boolean;
+  // GeoTIFF overlay
+  geoTIFFGrid: ElevationGrid | null;
 }
 
 export default function TacticalMap({
