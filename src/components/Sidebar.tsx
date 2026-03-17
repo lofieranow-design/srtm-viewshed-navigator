@@ -347,55 +347,107 @@ export default function Sidebar({
           <Radio className="h-5 w-5 text-primary" />
           Analyse Terrain
         </h1>
-        <p className="text-xs text-sidebar-foreground/60 mt-1">Visibilité Radio — SRTM</p>
+        <p className="text-xs text-sidebar-foreground/60 mt-1">Visibilité Radio & Courbes de niveau</p>
       </div>
 
-      {/* Step indicator */}
-      <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-primary">
-            Étape {step + 1}/{STEPS.length}
-          </span>
-          <span className="text-xs text-muted-foreground">{STEPS[step].title}</span>
-        </div>
-        <div className="flex gap-1">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 flex-1 rounded-full transition-colors ${
-                i <= step ? 'bg-primary' : 'bg-border'
-              }`}
-            />
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">{STEPS[step].description}</p>
-      </div>
-
-      {/* Step content */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {renderStep()}
-      </div>
-
-      {/* Navigation */}
-      <div className="border-t border-border p-3 flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 text-xs h-9"
-          disabled={step === 0}
-          onClick={() => setStep((s) => s - 1)}
+      {/* Tab selector */}
+      <div className="border-b border-border flex">
+        <button
+          className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+            activeTab === 'terrain'
+              ? 'text-primary border-b-2 border-primary bg-primary/5'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('terrain')}
         >
-          <ChevronLeft className="h-3 w-3 mr-1" /> Précédent
-        </Button>
-        <Button
-          size="sm"
-          className="flex-1 text-xs h-9"
-          disabled={step === STEPS.length - 1 || !canNext()}
-          onClick={() => setStep((s) => s + 1)}
+          <Radio className="h-3.5 w-3.5" /> Visibilité
+        </button>
+        <button
+          className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+            activeTab === 'contours'
+              ? 'text-primary border-b-2 border-primary bg-primary/5'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('contours')}
         >
-          Suivant <ChevronRight className="h-3 w-3 ml-1" />
-        </Button>
+          <Mountain className="h-3.5 w-3.5" /> Courbes
+        </button>
       </div>
+
+      {activeTab === 'terrain' ? (
+        <>
+          {/* Step indicator */}
+          <div className="border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-primary">
+                Étape {step + 1}/{STEPS.length}
+              </span>
+              <span className="text-xs text-muted-foreground">{STEPS[step].title}</span>
+            </div>
+            <div className="flex gap-1">
+              {STEPS.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 flex-1 rounded-full transition-colors ${
+                    i <= step ? 'bg-primary' : 'bg-border'
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">{STEPS[step].description}</p>
+          </div>
+
+          {/* Step content */}
+          <div className="flex-1 overflow-y-auto p-3">
+            {renderStep()}
+          </div>
+
+          {/* Navigation */}
+          <div className="border-t border-border p-3 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 text-xs h-9"
+              disabled={step === 0}
+              onClick={() => setStep((s) => s - 1)}
+            >
+              <ChevronLeft className="h-3 w-3 mr-1" /> Précédent
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1 text-xs h-9"
+              disabled={step === STEPS.length - 1 || !canNext()}
+              onClick={() => setStep((s) => s + 1)}
+            >
+              Suivant <ChevronRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-3">
+          <ContourPanel
+            isDrawing={contourConfig.isDrawing}
+            isGenerating={contourConfig.isGenerating}
+            hasSelection={contourConfig.hasSelection}
+            hasContours={contourConfig.hasContours}
+            contourInterval={contourConfig.contourInterval}
+            gridResolution={contourConfig.gridResolution}
+            showLabels={contourConfig.showLabels}
+            dataSource={contourConfig.dataSource}
+            hasGeoTIFF={contourConfig.hasGeoTIFF}
+            onStartDrawing={onContourStartDrawing}
+            onCancelDrawing={onContourCancelDrawing}
+            onGenerate={onContourGenerate}
+            onClear={onContourClear}
+            onExportGeoJSON={onContourExport}
+            onIntervalChange={onContourIntervalChange}
+            onResolutionChange={onContourResolutionChange}
+            onShowLabelsChange={onContourShowLabelsChange}
+            onDataSourceChange={onContourDataSourceChange}
+            onGeoTIFFLoad={onContourGeoTIFFLoad}
+          />
+        </div>
+      )}
     </div>
   );
 }
