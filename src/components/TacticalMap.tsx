@@ -347,5 +347,126 @@ export default function TacticalMap({
     });
   }, [contourLines, showContourLabels]);
 
+  // Render GeoTIFF as elevation overlay
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Cleanup previous overlay
+    if (geoTIFFOverlayRef.current) {
+      geoTIFFOverlayRef.current.remove();
+      geoTIFFOverlayRef.current = null;
+    }
+    if (geoTIFFRectRef.current) {
+      geoTIFFRectRef.current.remove();
+      geoTIFFRectRef.current = null;
+    }
+
+    if (!geoTIFFGrid) return;
+
+    const { data, bounds, rows, cols, noDataValue } = geoTIFFGrid;
+
+    // Validate bounds are in geographic coordinates (lat/lng)
+    if (
+      Math.abs(bounds.north) > 90 || Math.abs(bounds.south) > 90 ||
+      Math.abs(bounds.east) > 180 || Math.abs(bounds.west) > 180
+    ) {
+      console.warn('GeoTIFF appears to use projected coordinates, cannot display overlay.');
+      return;
+    }
+
+    // Find elevation range (excluding nodata)
+    let minElev = Infinity;
+    let maxElev = -Infinity;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const v = data[r][c];
+        if (noDataValue !== undefined && v === noDataValue) continue;
+        if (v < minElev) minElev = v;
+        if (v > maxElev) maxElev = v;
+      }
+    }
+    const range = maxElev - minElev || 1;
+
+    // Render to canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    const ctx = canvas.getContext('2d')!;
+    const imageData = ctx.createImageData(cols, rows);
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const v = data[r][c];
+        const idx = (r * cols + c) * 4;
+
+        if (noDataValue !== undefined && v === noDataValue) {
+          imageData.data[idx] = 0;
+          imageData.data[idx + 1] = 0;
+          imageData.data[idx + 2] = 0;
+          imageData.data[idx + 3] = 0; // transparent
+          continue;
+        }
+
+        const t = (v - minElev) / range;
+        // Terrain color ramp: blue (low) → green → yellow → brown → white (high)
+        let rr: number, gg: number, bb: number;
+        if (t < 0.2) {
+          // Deep green to light green
+          rr = Math.round(34 + t * 5 * 100);
+          gg = Math.round(120 + t * 5 * 60);
+          bb = Math.round(50);
+        } else if (t < 0.5) {
+          // Green to yellow
+          const tt = (t - 0.2) / 0.3;
+          rr = Math.round(134 + tt * 121);
+          gg = Math.round(180 + tt * 40);
+          bb = Math.round(50 - tt * 20);
+        } else if (t < 0.8) {
+          // Yellow to brown
+          const tt = (t - 0.5) / 0.3;
+          rr = Math.round(255 - tt * 116);
+          gg = Math.round(220 - tt * 120);
+          bb = Math.round(30 + tt * 20);
+        } else {
+          // Brown to white (snow)
+          const tt = (t - 0.8) / 0.2;
+          rr = Math.round(139 + tt * 116);
+          gg = Math.round(100 + tt * 155);
+          bb = Math.round(50 + tt * 205);
+        }
+
+        imageData.data[idx] = rr;
+        imageData.data[idx + 1] = gg;
+        imageData.data[idx + 2] = bb;
+        imageData.data[idx + 3] = 180; // semi-transparent
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    // Create image overlay
+    const imgUrl = canvas.toDataURL();
+    const leafletBounds = L.latLngBounds(
+      [bounds.south, bounds.west],
+      [bounds.north, bounds.east]
+    );
+
+    geoTIFFOverlayRef.current = L.imageOverlay(imgUrl, leafletBounds, {
+      opacity: 0.65,
+      interactive: false,
+    }).addTo(map);
+
+    // Add border rectangle
+    geoTIFFRectRef.current = L.rectangle(leafletBounds, {
+      color: '#2563eb',
+      weight: 2,
+      fillOpacity: 0,
+      dashArray: '6 4',
+    }).addTo(map);
+
+    // Fit map to GeoTIFF bounds
+    map.fitBounds(leafletBounds, { padding: [30, 30] });
+  }, [geoTIFFGrid]);
+
   return <div ref={containerRef} className="h-full w-full" />;
 }
