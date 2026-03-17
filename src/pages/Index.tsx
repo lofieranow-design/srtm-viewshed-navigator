@@ -254,9 +254,21 @@ export default function Index() {
         const startRow = Math.max(0, Math.floor((bounds.north - contourBounds.north) / cellH));
         const endRow = Math.min(rows - 1, Math.ceil((bounds.north - contourBounds.south) / cellH));
 
+        const clippedRows = endRow - startRow + 1;
+        const clippedCols = endCol - startCol + 1;
+
+        // Downsample if grid is too large (max ~200x200 for performance)
+        const maxDim = 200;
+        const stepR = clippedRows > maxDim ? Math.ceil(clippedRows / maxDim) : 1;
+        const stepC = clippedCols > maxDim ? Math.ceil(clippedCols / maxDim) : 1;
+
         const clipped: number[][] = [];
-        for (let r = startRow; r <= endRow; r++) {
-          clipped.push(data[r].slice(startCol, endCol + 1));
+        for (let r = startRow; r <= endRow; r += stepR) {
+          const row: number[] = [];
+          for (let c = startCol; c <= endCol; c += stepC) {
+            row.push(data[r][c]);
+          }
+          clipped.push(row);
         }
 
         grid = {
