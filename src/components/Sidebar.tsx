@@ -425,27 +425,29 @@ export default function Sidebar({
         </>
       ) : (
         <div className="flex-1 overflow-y-auto p-3">
-          <ContourPanel
-            isDrawing={contourConfig?.isDrawing ?? false}
-            isGenerating={contourConfig.isGenerating}
-            hasSelection={contourConfig.hasSelection}
-            hasContours={contourConfig.hasContours}
-            contourInterval={contourConfig.contourInterval}
-            gridResolution={contourConfig.gridResolution}
-            showLabels={contourConfig.showLabels}
-            dataSource={contourConfig.dataSource}
-            hasGeoTIFF={contourConfig.hasGeoTIFF}
-            onStartDrawing={onContourStartDrawing}
-            onCancelDrawing={onContourCancelDrawing}
-            onGenerate={onContourGenerate}
-            onClear={onContourClear}
-            onExportGeoJSON={onContourExport}
-            onIntervalChange={onContourIntervalChange}
-            onResolutionChange={onContourResolutionChange}
-            onShowLabelsChange={onContourShowLabelsChange}
-            onDataSourceChange={onContourDataSourceChange}
-            onGeoTIFFLoad={onContourGeoTIFFLoad}
-          />
+          {contourConfig && (
+            <ContourPanel
+              isDrawing={contourConfig.isDrawing}
+              isGenerating={contourConfig.isGenerating}
+              hasSelection={contourConfig.hasSelection}
+              hasContours={contourConfig.hasContours}
+              contourInterval={contourConfig.contourInterval}
+              gridResolution={contourConfig.gridResolution}
+              showLabels={contourConfig.showLabels}
+              dataSource={contourConfig.dataSource}
+              hasGeoTIFF={contourConfig.hasGeoTIFF}
+              onStartDrawing={onContourStartDrawing}
+              onCancelDrawing={onContourCancelDrawing}
+              onGenerate={onContourGenerate}
+              onClear={onContourClear}
+              onExportGeoJSON={onContourExport}
+              onIntervalChange={onContourIntervalChange}
+              onResolutionChange={onContourResolutionChange}
+              onShowLabelsChange={onContourShowLabelsChange}
+              onDataSourceChange={onContourDataSourceChange}
+              onGeoTIFFLoad={onContourGeoTIFFLoad}
+            />
+          )}
         </div>
       )}
     </div>
