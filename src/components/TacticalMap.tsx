@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { TacticalPoint, STATION_COLORS, STATION_LABELS, ViewshedResult } from '@/types/tactical';
+import { ContourLine } from '@/lib/contours';
 
 interface TacticalMapProps {
   points: TacticalPoint[];
@@ -11,6 +12,11 @@ interface TacticalMapProps {
   onPointDrag: (id: string, lat: number, lng: number) => void;
   onSuggestionClick: (lat: number, lng: number, elevation: number, fromId: string, toId: string) => void;
   centerOn: [number, number] | null;
+  // Contour props
+  contourDrawing: boolean;
+  onContourRectangle: (bounds: { north: number; south: number; east: number; west: number }) => void;
+  contourLines: ContourLine[];
+  showContourLabels: boolean;
 }
 
 export default function TacticalMap({
@@ -21,12 +27,19 @@ export default function TacticalMap({
   onPointDrag,
   onSuggestionClick,
   centerOn,
+  contourDrawing,
+  onContourRectangle,
+  contourLines,
+  showContourLabels,
 }: TacticalMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const linesRef = useRef<L.Polyline[]>([]);
   const suggestionsRef = useRef<L.Marker[]>([]);
+  const contourLayerRef = useRef<L.LayerGroup | null>(null);
+  const rectRef = useRef<L.Rectangle | null>(null);
+  const drawingRef = useRef(false);
 
   // Initialize map
   useEffect(() => {
@@ -189,6 +202,145 @@ export default function TacticalMap({
       mapRef.current.setView(centerOn, mapRef.current.getZoom());
     }
   }, [centerOn]);
+
+  // Rectangle drawing for contour selection
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (contourDrawing && !drawingRef.current) {
+      drawingRef.current = true;
+      map.getContainer().style.cursor = 'crosshair';
+
+      let startLatLng: L.LatLng | null = null;
+      let tempRect: L.Rectangle | null = null;
+
+      const onMouseDown = (e: L.LeafletMouseEvent) => {
+        startLatLng = e.latlng;
+        L.DomEvent.stopPropagation(e as any);
+      };
+
+      const onMouseMove = (e: L.LeafletMouseEvent) => {
+        if (!startLatLng) return;
+        const bounds = L.latLngBounds(startLatLng, e.latlng);
+        if (tempRect) {
+          tempRect.setBounds(bounds);
+        } else {
+          tempRect = L.rectangle(bounds, {
+            color: '#2563eb',
+            weight: 2,
+            fillOpacity: 0.1,
+            dashArray: '5 5',
+          }).addTo(map);
+        }
+      };
+
+      const onMouseUp = (e: L.LeafletMouseEvent) => {
+        if (!startLatLng) return;
+        const bounds = L.latLngBounds(startLatLng, e.latlng);
+
+        // Remove temp rect
+        if (tempRect) tempRect.remove();
+
+        // Draw permanent rect
+        if (rectRef.current) rectRef.current.remove();
+        rectRef.current = L.rectangle(bounds, {
+          color: '#2563eb',
+          weight: 2,
+          fillOpacity: 0.05,
+        }).addTo(map);
+
+        onContourRectangle({
+          north: bounds.getNorth(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          west: bounds.getWest(),
+        });
+
+        // Cleanup
+        map.off('mousedown', onMouseDown);
+        map.off('mousemove', onMouseMove);
+        map.off('mouseup', onMouseUp);
+        map.dragging.enable();
+        drawingRef.current = false;
+        startLatLng = null;
+      };
+
+      map.dragging.disable();
+      map.on('mousedown', onMouseDown);
+      map.on('mousemove', onMouseMove);
+      map.on('mouseup', onMouseUp);
+
+      return () => {
+        map.off('mousedown', onMouseDown);
+        map.off('mousemove', onMouseMove);
+        map.off('mouseup', onMouseUp);
+        map.dragging.enable();
+        drawingRef.current = false;
+        if (tempRect) tempRect.remove();
+      };
+    } else if (!contourDrawing) {
+      drawingRef.current = false;
+      map.getContainer().style.cursor = isPlacing ? 'crosshair' : 'grab';
+    }
+  }, [contourDrawing, onContourRectangle, isPlacing]);
+
+  // Render contour lines
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (contourLayerRef.current) {
+      contourLayerRef.current.clearLayers();
+    } else {
+      contourLayerRef.current = L.layerGroup().addTo(map);
+    }
+
+    if (contourLines.length === 0) return;
+
+    // Color scale based on elevation range
+    const elevations = contourLines.map((c) => c.elevation);
+    const minElev = Math.min(...elevations);
+    const maxElev = Math.max(...elevations);
+    const range = maxElev - minElev || 1;
+
+    contourLines.forEach((contour) => {
+      const t = (contour.elevation - minElev) / range;
+      // Green to brown gradient
+      const r = Math.round(34 + t * 105);
+      const g = Math.round(139 - t * 70);
+      const b = Math.round(34);
+      const color = `rgb(${r}, ${g}, ${b})`;
+      const isMajor = contour.elevation % 100 === 0;
+
+      const latlngs = contour.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
+      if (latlngs.length < 2) return;
+
+      const polyline = L.polyline(latlngs, {
+        color,
+        weight: isMajor ? 2 : 1,
+        opacity: isMajor ? 0.9 : 0.6,
+      });
+
+      polyline.addTo(contourLayerRef.current!);
+
+      // Add elevation labels
+      if (showContourLabels && latlngs.length > 3) {
+        const midIdx = Math.floor(latlngs.length / 2);
+        const midPt = latlngs[midIdx];
+        const label = L.marker(midPt, {
+          icon: L.divIcon({
+            className: 'contour-label',
+            html: `<span style="font-size:9px;color:${color};font-weight:${isMajor ? 'bold' : 'normal'};background:rgba(255,255,255,0.8);padding:0 2px;border-radius:2px;white-space:nowrap;">${contour.elevation}m</span>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        label.addTo(contourLayerRef.current!);
+      }
+    });
+  }, [contourLines, showContourLabels]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

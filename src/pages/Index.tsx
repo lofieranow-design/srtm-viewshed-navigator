@@ -1,6 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import { TacticalPoint, StationType, STATION_LABELS, ViewshedResult, LinkAnalysis } from '@/types/tactical';
 import { getElevationProfile, calculateLineOfSight, suggestRelayPositions, findMinimalRelays } from '@/lib/elevation';
+import { generateContours, contoursToGeoJSON, ContourLine } from '@/lib/contours';
+import { fetchElevationGrid, parseGeoTIFF } from '@/lib/elevation-grid';
+import { ElevationGrid } from '@/lib/contours';
 import TacticalMap from '@/components/TacticalMap';
 import Sidebar from '@/components/Sidebar';
 import ElevationProfile from '@/components/ElevationProfile';
@@ -19,6 +22,18 @@ export default function Index() {
   const pointsRef = useRef(points);
   pointsRef.current = points;
 
+  // Contour state
+  const [contourDrawing, setContourDrawing] = useState(false);
+  const [contourGenerating, setContourGenerating] = useState(false);
+  const [contourBounds, setContourBounds] = useState<{ north: number; south: number; east: number; west: number } | null>(null);
+  const [contourLines, setContourLines] = useState<ContourLine[]>([]);
+  const [contourInterval, setContourInterval] = useState(20);
+  const [gridResolution, setGridResolution] = useState(50);
+  const [showContourLabels, setShowContourLabels] = useState(true);
+  const [contourDataSource, setContourDataSource] = useState<'api' | 'geotiff'>('api');
+  const [geoTIFFGrid, setGeoTIFFGrid] = useState<ElevationGrid | null>(null);
+
+  // === Terrain analysis handlers ===
   const handleStartPlacing = useCallback((type: StationType) => {
     setPlacingType(type);
     setIsPlacing(true);
@@ -76,7 +91,6 @@ export default function Index() {
       setLinkAnalysis(null);
 
       try {
-        // Step 1: Get full elevation profile and direct analysis
         const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 150);
         if (fullProfile.length === 0) {
           toast({ title: 'Erreur', description: "Impossible de récupérer les données d'élévation.", variant: 'destructive' });
@@ -96,7 +110,6 @@ export default function Index() {
         setViewshedResults([directResult]);
 
         if (directLos.visible) {
-          // Direct link works!
           setLinkAnalysis({
             sourceId: fromId, destId: toId,
             directResult,
@@ -109,9 +122,7 @@ export default function Index() {
           return;
         }
 
-        // Step 2: Use greedy forward-scan to find minimum relays
         toast({ title: '❌ Obstacle détecté', description: 'Recherche du nombre minimal de relais...' });
-
         const minRelays = findMinimalRelays(fullProfile, from.antennaHeight, to.antennaHeight, 5);
 
         if (minRelays.length === 0) {
@@ -122,12 +133,11 @@ export default function Index() {
             relayIds: [],
             complete: false,
           });
-          toast({ title: '❌ Aucun relais trouvé', description: 'Impossible de résoudre la liaison', variant: 'destructive' });
+          toast({ title: '❌ Aucun relais trouvé', variant: 'destructive' });
           setIsAnalyzing(false);
           return;
         }
 
-        // Step 3: Place relay points
         const relayPoints: TacticalPoint[] = [];
         const relayIds: string[] = [];
         const existingRelayCount = pointsRef.current.filter((p) => p.type === 'relais').length;
@@ -135,13 +145,11 @@ export default function Index() {
         for (let i = 0; i < minRelays.length; i++) {
           const r = minRelays[i];
           const relayId = `point-${++idCounter}`;
-          const relayName = `Relais ${existingRelayCount + i + 1}`;
           const relayPoint: TacticalPoint = {
             id: relayId,
-            name: relayName,
+            name: `Relais ${existingRelayCount + i + 1}`,
             type: 'relais',
-            lat: r.lat,
-            lng: r.lng,
+            lat: r.lat, lng: r.lng,
             antennaHeight: 10,
           };
           relayPoints.push(relayPoint);
@@ -149,10 +157,8 @@ export default function Index() {
         }
 
         setPoints((prev) => [...prev, ...relayPoints]);
-        toast({ title: `📍 ${relayPoints.length} relais placé(s)`, description: relayPoints.map((r) => r.name).join(', ') });
+        toast({ title: `📍 ${relayPoints.length} relais placé(s)` });
 
-        // Step 4: Build segments by slicing the ORIGINAL profile at relay indices
-        // This ensures consistency — same elevation data used for planning and verification
         const relayIndices = minRelays.map((r) => r.profileIndex);
         const chainIndices = [0, ...relayIndices, fullProfile.length - 1];
         const chainIds = [fromId, ...relayIds, toId];
@@ -164,20 +170,15 @@ export default function Index() {
         for (let i = 0; i < chainIndices.length - 1; i++) {
           const startIdx = chainIndices[i];
           const endIdx = chainIndices[i + 1];
-          // Slice the original profile and re-base distances from 0
           const sliced = fullProfile.slice(startIdx, endIdx + 1);
           const baseDistance = sliced[0].distance;
-          const segProfile = sliced.map((p) => ({
-            ...p,
-            distance: p.distance - baseDistance,
-          }));
+          const segProfile = sliced.map((p) => ({ ...p, distance: p.distance - baseDistance }));
 
           if (segProfile.length >= 2) {
             const segLos = calculateLineOfSight(segProfile, chainHeights[i], chainHeights[i + 1]);
             const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, chainHeights[i], chainHeights[i + 1]);
             const segResult: ViewshedResult = {
-              fromId: chainIds[i],
-              toId: chainIds[i + 1],
+              fromId: chainIds[i], toId: chainIds[i + 1],
               visible: segLos.visible,
               elevationProfile: segProfile,
               losLine: segLos.losLine,
@@ -188,25 +189,22 @@ export default function Index() {
           }
         }
 
-        // Clear suggestions from direct result since relays are now placed
         const resolvedDirect = { ...directResult, suggestions: [] };
-        // Only keep segment results on the map (not the blocked direct line)
         setViewshedResults(allNewResults);
-        const allVisible = segmentResults.every((s) => s.visible);
 
+        const allVisible = segmentResults.every((s) => s.visible);
         setLinkAnalysis({
           sourceId: fromId, destId: toId,
           directResult: resolvedDirect,
-          segmentResults,
-          relayIds,
+          segmentResults, relayIds,
           complete: allVisible,
         });
 
-        if (allVisible) {
-          toast({ title: '✅ Liaison établie', description: `${relayIds.length} relais — tous les segments visibles` });
-        } else {
-          toast({ title: '⚠️ Partiellement résolu', description: 'Certains segments restent bloqués', variant: 'destructive' });
-        }
+        toast({
+          title: allVisible ? '✅ Liaison établie' : '⚠️ Partiellement résolu',
+          description: allVisible ? `${relayIds.length} relais` : 'Certains segments bloqués',
+          variant: allVisible ? undefined : 'destructive',
+        });
       } catch {
         toast({ title: 'Erreur', description: "Échec de l'analyse.", variant: 'destructive' });
       }
@@ -216,18 +214,13 @@ export default function Index() {
   );
 
   const handleSuggestionClick = useCallback(
-    async (lat: number, lng: number, _elevation: number, _fromId: string, _toId: string) => {
+    async (lat: number, lng: number) => {
       const relayId = `point-${++idCounter}`;
       const relayName = `Relais ${points.filter((p) => p.type === 'relais').length + 1}`;
-      const newRelay: TacticalPoint = {
-        id: relayId,
-        name: relayName,
-        type: 'relais',
-        lat,
-        lng,
-        antennaHeight: 10,
-      };
-      setPoints((prev) => [...prev, newRelay]);
+      setPoints((prev) => [...prev, {
+        id: relayId, name: relayName, type: 'relais' as const,
+        lat, lng, antennaHeight: 10,
+      }]);
       toast({ title: 'Relais placé', description: `${relayName} ajouté.` });
     },
     [points]
@@ -235,6 +228,83 @@ export default function Index() {
 
   const handleCenterOnPoint = useCallback((point: TacticalPoint) => {
     setCenterOn([point.lat, point.lng]);
+  }, []);
+
+  // === Contour handlers ===
+  const handleContourRectangle = useCallback((bounds: { north: number; south: number; east: number; west: number }) => {
+    setContourBounds(bounds);
+    setContourDrawing(false);
+  }, []);
+
+  const handleContourGenerate = useCallback(async () => {
+    if (!contourBounds) return;
+    setContourGenerating(true);
+
+    try {
+      let grid: ElevationGrid;
+
+      if (contourDataSource === 'geotiff' && geoTIFFGrid) {
+        // Clip GeoTIFF grid to selected bounds
+        const { data, bounds, rows, cols, noDataValue } = geoTIFFGrid;
+        const cellW = (bounds.east - bounds.west) / (cols - 1);
+        const cellH = (bounds.north - bounds.south) / (rows - 1);
+
+        const startCol = Math.max(0, Math.floor((contourBounds.west - bounds.west) / cellW));
+        const endCol = Math.min(cols - 1, Math.ceil((contourBounds.east - bounds.west) / cellW));
+        const startRow = Math.max(0, Math.floor((bounds.north - contourBounds.north) / cellH));
+        const endRow = Math.min(rows - 1, Math.ceil((bounds.north - contourBounds.south) / cellH));
+
+        const clipped: number[][] = [];
+        for (let r = startRow; r <= endRow; r++) {
+          clipped.push(data[r].slice(startCol, endCol + 1));
+        }
+
+        grid = {
+          data: clipped,
+          bounds: contourBounds,
+          rows: clipped.length,
+          cols: clipped[0]?.length || 0,
+          noDataValue,
+        };
+      } else {
+        grid = await fetchElevationGrid(contourBounds, gridResolution);
+      }
+
+      const contours = generateContours(grid, contourInterval);
+      setContourLines(contours);
+
+      toast({
+        title: '✅ Courbes générées',
+        description: `${contours.length} courbes de niveau (intervalle ${contourInterval}m)`,
+      });
+    } catch (err) {
+      console.error('Contour generation error:', err);
+      toast({ title: 'Erreur', description: 'Échec de la génération des courbes.', variant: 'destructive' });
+    }
+    setContourGenerating(false);
+  }, [contourBounds, contourDataSource, geoTIFFGrid, gridResolution, contourInterval]);
+
+  const handleContourExport = useCallback(() => {
+    if (contourLines.length === 0) return;
+    const geojson = contoursToGeoJSON(contourLines);
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `contours_${contourInterval}m.geojson`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Export réussi', description: 'Fichier GeoJSON téléchargé.' });
+  }, [contourLines, contourInterval]);
+
+  const handleGeoTIFFLoad = useCallback(async (file: File) => {
+    try {
+      const grid = await parseGeoTIFF(file);
+      setGeoTIFFGrid(grid);
+      toast({ title: '✅ GeoTIFF chargé', description: `${grid.cols}×${grid.rows} pixels` });
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de lire le fichier GeoTIFF.', variant: 'destructive' });
+    }
   }, []);
 
   return (
@@ -249,12 +319,30 @@ export default function Index() {
         onDeletePoint={handleDeletePoint}
         onUpdatePoint={handleUpdatePoint}
         onRunViewshed={handleRunViewshed}
-        onClearViewshed={() => {
-          setViewshedResults([]);
-          setLinkAnalysis(null);
-        }}
+        onClearViewshed={() => { setViewshedResults([]); setLinkAnalysis(null); }}
         onCenterOnPoint={handleCenterOnPoint}
         isAnalyzing={isAnalyzing}
+        contourConfig={{
+          isDrawing: contourDrawing,
+          isGenerating: contourGenerating,
+          hasSelection: !!contourBounds,
+          hasContours: contourLines.length > 0,
+          contourInterval,
+          gridResolution,
+          showLabels: showContourLabels,
+          dataSource: contourDataSource,
+          hasGeoTIFF: !!geoTIFFGrid,
+        }}
+        onContourStartDrawing={() => setContourDrawing(true)}
+        onContourCancelDrawing={() => setContourDrawing(false)}
+        onContourGenerate={handleContourGenerate}
+        onContourClear={() => { setContourLines([]); setContourBounds(null); }}
+        onContourExport={handleContourExport}
+        onContourIntervalChange={setContourInterval}
+        onContourResolutionChange={setGridResolution}
+        onContourShowLabelsChange={setShowContourLabels}
+        onContourDataSourceChange={setContourDataSource}
+        onContourGeoTIFFLoad={handleGeoTIFFLoad}
       />
 
       <div className="relative flex-1">
@@ -266,6 +354,10 @@ export default function Index() {
           onPointDrag={handlePointDrag}
           onSuggestionClick={handleSuggestionClick}
           centerOn={centerOn}
+          contourDrawing={contourDrawing}
+          onContourRectangle={handleContourRectangle}
+          contourLines={contourLines}
+          showContourLabels={showContourLabels}
         />
 
         <ElevationProfile
