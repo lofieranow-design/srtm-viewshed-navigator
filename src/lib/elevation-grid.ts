@@ -69,8 +69,8 @@ export async function parseGeoTIFF(file: File): Promise<ElevationGrid> {
   const bbox = image.getBoundingBox(); // [west, south, east, north]
 
   // Get nodata value
-  const fileDir = image.getFileDirectory();
-  const noDataValue = fileDir.GDAL_NODATA ? parseFloat(fileDir.GDAL_NODATA) : undefined;
+  const fileDir = image.getFileDirectory() as Record<string, any>;
+  const noDataValue = fileDir['GDAL_NODATA'] ? parseFloat(String(fileDir['GDAL_NODATA'])) : undefined;
 
   // Reshape into 2D grid
   const grid: number[][] = [];
