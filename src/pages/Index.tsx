@@ -77,7 +77,7 @@ export default function Index() {
 
       try {
         // Step 1: Get full elevation profile and direct analysis
-        const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 100);
+        const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 150);
         if (fullProfile.length === 0) {
           toast({ title: 'Erreur', description: "Impossible de récupérer les données d'élévation.", variant: 'destructive' });
           setIsAnalyzing(false);
