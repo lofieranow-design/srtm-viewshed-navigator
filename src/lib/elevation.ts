@@ -108,27 +108,24 @@ export function suggestRelayPositions(
 ): { lat: number; lng: number; elevation: number; distance: number; reason: string }[] {
   if (profile.length < 3) return [];
 
-  const relayAntennaHeight = 10; // assumed relay antenna height
+  const relayAntennaHeight = 10;
 
   // For each candidate point, check if it has LOS to BOTH endpoints
-  const candidates: { index: number; score: number; seesFrom: boolean; seesTo: boolean }[] = [];
+  const candidates: { index: number; score: number }[] = [];
 
   for (let i = 2; i < profile.length - 2; i++) {
     const seesFrom = checkVisibility(profile, 0, i, antennaHeight1, relayAntennaHeight);
     const seesTo = checkVisibility(profile, i, profile.length - 1, relayAntennaHeight, antennaHeight2);
 
     if (seesFrom && seesTo) {
-      // Score: prefer higher elevation + more central position
       const centrality = 1 - Math.abs(2 * i / profile.length - 1);
       const score = profile[i].elevation + centrality * 100;
-      candidates.push({ index: i, score, seesFrom, seesTo });
+      candidates.push({ index: i, score });
     }
   }
 
-  // Sort by score (best first)
   candidates.sort((a, b) => b.score - a.score);
 
-  // Deduplicate: skip candidates too close to already selected ones
   const suggestions: { lat: number; lng: number; elevation: number; distance: number; reason: string }[] = [];
   const usedIndices = new Set<number>();
 
@@ -142,16 +139,12 @@ export function suggestRelayPositions(
 
     const p = profile[c.index];
     suggestions.push({
-      lat: p.lat,
-      lng: p.lng,
-      elevation: p.elevation,
-      distance: p.distance,
+      lat: p.lat, lng: p.lng, elevation: p.elevation, distance: p.distance,
       reason: `Altitude ${p.elevation.toFixed(0)}m — visibilité directe vers les 2 extrémités ✅`,
     });
     usedIndices.add(c.index);
   }
 
-  // If no point sees both, find the best "sees one side" as fallback
   if (suggestions.length === 0) {
     let bestIdx = -1;
     let bestElev = -Infinity;
@@ -166,16 +159,107 @@ export function suggestRelayPositions(
       const seesFrom = checkVisibility(profile, 0, bestIdx, antennaHeight1, relayAntennaHeight);
       const seesTo = checkVisibility(profile, bestIdx, profile.length - 1, relayAntennaHeight, antennaHeight2);
       suggestions.push({
-        lat: p.lat,
-        lng: p.lng,
-        elevation: p.elevation,
-        distance: p.distance,
+        lat: p.lat, lng: p.lng, elevation: p.elevation, distance: p.distance,
         reason: `Point le plus élevé (${p.elevation.toFixed(0)}m) — ${seesFrom ? '✅ voit source' : '❌ ne voit pas source'}, ${seesTo ? '✅ voit destination' : '❌ ne voit pas destination'}`,
       });
     }
   }
 
   return suggestions;
+}
+
+/**
+ * Greedy forward-scan: finds the minimum set of relay positions needed
+ * to establish a chain of LOS segments from start to end.
+ * 
+ * Algorithm:
+ * 1. From current position, scan forward to find the farthest point with LOS
+ * 2. If it reaches the destination → segment complete
+ * 3. If not, find the best relay candidate between current and first obstacle
+ *    that can see the farthest forward
+ * 4. Place relay there, repeat from relay position
+ */
+export function findMinimalRelays(
+  profile: { distance: number; elevation: number; lat: number; lng: number }[],
+  antennaHeight1: number,
+  antennaHeight2: number,
+  maxRelays: number = 5
+): { lat: number; lng: number; elevation: number; distance: number; profileIndex: number }[] {
+  if (profile.length < 3) return [];
+
+  const relayH = 10;
+  const relays: { lat: number; lng: number; elevation: number; distance: number; profileIndex: number }[] = [];
+
+  let currentIdx = 0;
+  let currentH = antennaHeight1;
+
+  while (currentIdx < profile.length - 1 && relays.length < maxRelays) {
+    // Check if current position can see the destination
+    const destH = relays.length === 0 ? antennaHeight2 : antennaHeight2; // dest always uses its own height
+    if (checkVisibility(profile, currentIdx, profile.length - 1, currentH, antennaHeight2)) {
+      break; // Can see destination — done!
+    }
+
+    // Find the farthest visible point from current position
+    let farthestVisible = currentIdx + 1;
+    for (let j = currentIdx + 2; j < profile.length; j++) {
+      if (checkVisibility(profile, currentIdx, j, currentH, relayH)) {
+        farthestVisible = j;
+      }
+    }
+
+    // Now find the best relay: among visible points from current,
+    // pick the one that can see the farthest forward (greedy)
+    let bestRelayIdx = -1;
+    let bestForwardReach = -1;
+
+    for (let candidate = currentIdx + 1; candidate <= farthestVisible; candidate++) {
+      // This candidate must be visible from current
+      if (!checkVisibility(profile, currentIdx, candidate, currentH, relayH)) continue;
+
+      // How far forward can this candidate see?
+      let forwardReach = candidate;
+      if (checkVisibility(profile, candidate, profile.length - 1, relayH, antennaHeight2)) {
+        forwardReach = profile.length - 1; // Can see destination!
+      } else {
+        for (let j = candidate + 1; j < profile.length; j++) {
+          const h2 = j === profile.length - 1 ? antennaHeight2 : relayH;
+          if (checkVisibility(profile, candidate, j, relayH, h2)) {
+            forwardReach = j;
+          }
+        }
+      }
+
+      if (forwardReach > bestForwardReach) {
+        bestForwardReach = forwardReach;
+        bestRelayIdx = candidate;
+      }
+    }
+
+    if (bestRelayIdx < 0 || bestRelayIdx === currentIdx) {
+      // Can't progress — fallback: place at highest point ahead
+      let highestIdx = currentIdx + 1;
+      for (let j = currentIdx + 2; j < profile.length - 1; j++) {
+        if (profile[j].elevation > profile[highestIdx].elevation) {
+          highestIdx = j;
+        }
+      }
+      bestRelayIdx = highestIdx;
+    }
+
+    const p = profile[bestRelayIdx];
+    relays.push({
+      lat: p.lat, lng: p.lng,
+      elevation: p.elevation,
+      distance: p.distance,
+      profileIndex: bestRelayIdx,
+    });
+
+    currentIdx = bestRelayIdx;
+    currentH = relayH;
+  }
+
+  return relays;
 }
 
 function checkVisibility(
