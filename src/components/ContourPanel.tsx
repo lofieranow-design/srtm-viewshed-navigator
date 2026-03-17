@@ -21,6 +21,7 @@ interface ContourPanelProps {
   onGenerate: () => void;
   onClear: () => void;
   onExportGeoJSON: () => void;
+  onExportPNG: () => void;
   onIntervalChange: (interval: number) => void;
   onResolutionChange: (res: number) => void;
   onShowLabelsChange: (show: boolean) => void;
