@@ -44,6 +44,7 @@ export default function ContourPanel({
   onGenerate,
   onClear,
   onExportGeoJSON,
+  onExportPNG,
   onIntervalChange,
   onResolutionChange,
   onShowLabelsChange,
