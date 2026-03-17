@@ -360,6 +360,7 @@ export default function Index() {
         onContourGenerate={handleContourGenerate}
         onContourClear={() => { setContourLines([]); setContourBounds(null); }}
         onContourExport={handleContourExport}
+        onContourExportPNG={handleContourExportPNG}
         onContourIntervalChange={setContourInterval}
         onContourResolutionChange={setGridResolution}
         onContourShowLabelsChange={setShowContourLabels}
