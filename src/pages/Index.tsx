@@ -323,7 +323,14 @@ export default function Index() {
     try {
       const grid = await parseGeoTIFF(file);
       setGeoTIFFGrid(grid);
-      toast({ title: '✅ GeoTIFF chargé', description: `${grid.cols}×${grid.rows} pixels` });
+      // Auto-select the GeoTIFF extent as contour bounds
+      setContourBounds(grid.bounds);
+      setContourDrawing(false);
+      // Center map on GeoTIFF extent
+      const centerLat = (grid.bounds.north + grid.bounds.south) / 2;
+      const centerLng = (grid.bounds.east + grid.bounds.west) / 2;
+      setCenterOn([centerLat, centerLng]);
+      toast({ title: '✅ GeoTIFF chargé', description: `${grid.cols}×${grid.rows} pixels — zone auto-sélectionnée` });
     } catch {
       toast({ title: 'Erreur', description: 'Impossible de lire le fichier GeoTIFF.', variant: 'destructive' });
     }

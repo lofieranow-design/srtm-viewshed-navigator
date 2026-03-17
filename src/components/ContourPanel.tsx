@@ -117,31 +117,39 @@ export default function ContourPanel({
         )}
       </div>
 
-      {/* Selection */}
-      <div className="rounded-lg border border-border p-3 space-y-3">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <MapPin className="h-3 w-3" /> Zone de sélection
-        </h4>
+      {/* Selection — hidden when GeoTIFF is loaded (auto-extent) */}
+      {!(dataSource === 'geotiff' && hasGeoTIFF) && (
+        <div className="rounded-lg border border-border p-3 space-y-3">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <MapPin className="h-3 w-3" /> Zone de sélection
+          </h4>
 
-        {isDrawing ? (
-          <>
-            <p className="text-xs text-primary animate-pulse">
-              ✏️ Dessinez un rectangle sur la carte...
-            </p>
-            <Button size="sm" variant="destructive" className="w-full text-xs h-8" onClick={onCancelDrawing}>
-              Annuler
+          {isDrawing ? (
+            <>
+              <p className="text-xs text-primary animate-pulse">
+                ✏️ Dessinez un rectangle sur la carte...
+              </p>
+              <Button size="sm" variant="destructive" className="w-full text-xs h-8" onClick={onCancelDrawing}>
+                Annuler
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" className="w-full text-xs h-8" onClick={onStartDrawing}>
+              <MapPin className="h-3 w-3 mr-1" /> Sélectionner une zone
             </Button>
-          </>
-        ) : (
-          <Button size="sm" className="w-full text-xs h-8" onClick={onStartDrawing}>
-            <MapPin className="h-3 w-3 mr-1" /> Sélectionner une zone
-          </Button>
-        )}
+          )}
 
-        {hasSelection && !isDrawing && (
-          <p className="text-xs text-accent">✅ Zone sélectionnée</p>
-        )}
-      </div>
+          {hasSelection && !isDrawing && (
+            <p className="text-xs text-accent">✅ Zone sélectionnée</p>
+          )}
+        </div>
+      )}
+
+      {dataSource === 'geotiff' && hasGeoTIFF && hasSelection && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs text-accent">✅ Emprise GeoTIFF auto-sélectionnée</p>
+        </div>
+      )}
 
       {/* Contour settings */}
       <div className="rounded-lg border border-border p-3 space-y-3">
