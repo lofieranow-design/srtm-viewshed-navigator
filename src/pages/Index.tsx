@@ -297,6 +297,28 @@ export default function Index() {
     toast({ title: 'Export réussi', description: 'Fichier GeoJSON téléchargé.' });
   }, [contourLines, contourInterval]);
 
+  const handleContourExportPNG = useCallback(async () => {
+    if (!contourBounds) return;
+    const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
+    if (!mapContainer) return;
+
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(mapContainer, {
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `contours_${contourInterval}m.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast({ title: 'Export réussi', description: 'Image PNG téléchargée.' });
+    } catch {
+      toast({ title: 'Erreur', description: "Échec de l'export PNG.", variant: 'destructive' });
+    }
+  }, [contourBounds, contourInterval]);
+
   const handleGeoTIFFLoad = useCallback(async (file: File) => {
     try {
       const grid = await parseGeoTIFF(file);
