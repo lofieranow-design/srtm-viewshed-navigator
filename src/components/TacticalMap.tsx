@@ -33,6 +33,7 @@ export default function TacticalMap({
   onContourRectangle,
   contourLines,
   showContourLabels,
+  geoTIFFGrid,
 }: TacticalMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,6 +43,8 @@ export default function TacticalMap({
   const contourLayerRef = useRef<L.LayerGroup | null>(null);
   const rectRef = useRef<L.Rectangle | null>(null);
   const drawingRef = useRef(false);
+  const geoTIFFOverlayRef = useRef<L.ImageOverlay | null>(null);
+  const geoTIFFRectRef = useRef<L.Rectangle | null>(null);
 
   // Initialize map
   useEffect(() => {
