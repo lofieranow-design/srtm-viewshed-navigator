@@ -388,6 +388,7 @@ export default function Index() {
           onContourRectangle={handleContourRectangle}
           contourLines={contourLines}
           showContourLabels={showContourLabels}
+          geoTIFFGrid={geoTIFFGrid}
         />
 
         <ElevationProfile
