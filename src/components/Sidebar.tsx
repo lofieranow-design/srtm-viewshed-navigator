@@ -73,6 +73,7 @@ export default function Sidebar({
   onContourGenerate,
   onContourClear,
   onContourExport,
+  onContourExportPNG,
   onContourIntervalChange,
   onContourResolutionChange,
   onContourShowLabelsChange,
