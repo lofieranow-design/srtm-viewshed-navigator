@@ -66,7 +66,19 @@ export default function Sidebar({
   onClearViewshed,
   onCenterOnPoint,
   isAnalyzing,
+  contourConfig,
+  onContourStartDrawing,
+  onContourCancelDrawing,
+  onContourGenerate,
+  onContourClear,
+  onContourExport,
+  onContourIntervalChange,
+  onContourResolutionChange,
+  onContourShowLabelsChange,
+  onContourDataSourceChange,
+  onContourGeoTIFFLoad,
 }: SidebarProps) {
+  const [activeTab, setActiveTab] = useState<'terrain' | 'contours'>('terrain');
   const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState<StationType>('pc_principal');
   const [fromId, setFromId] = useState('');
