@@ -46,6 +46,7 @@ interface SidebarProps {
   onContourGenerate: () => void;
   onContourClear: () => void;
   onContourExport: () => void;
+  onContourExportPNG: () => void;
   onContourIntervalChange: (interval: number) => void;
   onContourResolutionChange: (res: number) => void;
   onContourShowLabelsChange: (show: boolean) => void;
