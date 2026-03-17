@@ -196,7 +196,7 @@ export default function Index() {
 
         setLinkAnalysis({
           sourceId: fromId, destId: toId,
-          directResult,
+          directResult: resolvedDirect,
           segmentResults,
           relayIds,
           complete: allVisible,
