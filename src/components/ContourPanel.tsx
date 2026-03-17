@@ -56,6 +56,7 @@ export default function ContourPanel({
 
   return (
     <div className="space-y-4 p-1">
+
       {/* Data source */}
       <div className="rounded-lg border border-border p-3 space-y-3">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
