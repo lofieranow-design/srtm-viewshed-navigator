@@ -26,6 +26,20 @@ export interface ViewshedResult {
   suggestions: RelaySuggestion[];
 }
 
+/** Represents a full analysis chain between two endpoints */
+export interface LinkAnalysis {
+  sourceId: string;
+  destId: string;
+  /** The original direct analysis result (may have obstacles) */
+  directResult: ViewshedResult;
+  /** Ordered segment results through relays (source→R1, R1→R2, ..., Rn→dest) */
+  segmentResults: ViewshedResult[];
+  /** IDs of relay points placed along the chain */
+  relayIds: string[];
+  /** Whether the full chain is complete (all segments visible) */
+  complete: boolean;
+}
+
 export const STATION_LABELS: Record<StationType, string> = {
   pc_principal: 'PC Principal',
   pc_harpon: 'PC Harpon',
