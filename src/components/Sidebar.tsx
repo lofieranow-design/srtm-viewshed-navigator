@@ -14,6 +14,18 @@ const STEPS = [
   { title: 'Résultats', icon: Check, description: 'Consultez les résultats de l\'analyse' },
 ];
 
+interface ContourConfig {
+  isDrawing: boolean;
+  isGenerating: boolean;
+  hasSelection: boolean;
+  hasContours: boolean;
+  contourInterval: number;
+  gridResolution: number;
+  showLabels: boolean;
+  dataSource: 'api' | 'geotiff';
+  hasGeoTIFF: boolean;
+}
+
 interface SidebarProps {
   points: TacticalPoint[];
   viewshedResults: ViewshedResult[];
@@ -27,6 +39,18 @@ interface SidebarProps {
   onClearViewshed: () => void;
   onCenterOnPoint: (point: TacticalPoint) => void;
   isAnalyzing: boolean;
+  // Contour props
+  contourConfig: ContourConfig;
+  onContourStartDrawing: () => void;
+  onContourCancelDrawing: () => void;
+  onContourGenerate: () => void;
+  onContourClear: () => void;
+  onContourExport: () => void;
+  onContourIntervalChange: (interval: number) => void;
+  onContourResolutionChange: (res: number) => void;
+  onContourShowLabelsChange: (show: boolean) => void;
+  onContourDataSourceChange: (source: 'api' | 'geotiff') => void;
+  onContourGeoTIFFLoad: (file: File) => void;
 }
 
 export default function Sidebar({
