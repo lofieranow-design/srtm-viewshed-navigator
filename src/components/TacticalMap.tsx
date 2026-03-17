@@ -19,6 +19,7 @@ export default function TacticalMap({
   isPlacing,
   onMapClick,
   onPointDrag,
+  onSuggestionClick,
   centerOn,
 }: TacticalMapProps) {
   const mapRef = useRef<L.Map | null>(null);
