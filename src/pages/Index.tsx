@@ -77,7 +77,7 @@ export default function Index() {
 
       try {
         // Step 1: Get full elevation profile and direct analysis
-        const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 100);
+        const fullProfile = await getElevationProfile(from.lat, from.lng, to.lat, to.lng, 150);
         if (fullProfile.length === 0) {
           toast({ title: 'Erreur', description: "Impossible de récupérer les données d'élévation.", variant: 'destructive' });
           setIsAnalyzing(false);
@@ -151,22 +151,33 @@ export default function Index() {
         setPoints((prev) => [...prev, ...relayPoints]);
         toast({ title: `📍 ${relayPoints.length} relais placé(s)`, description: relayPoints.map((r) => r.name).join(', ') });
 
-        // Step 4: Analyze each segment of the chain
-        const chain: TacticalPoint[] = [from, ...relayPoints, to];
+        // Step 4: Build segments by slicing the ORIGINAL profile at relay indices
+        // This ensures consistency — same elevation data used for planning and verification
+        const relayIndices = minRelays.map((r) => r.profileIndex);
+        const chainIndices = [0, ...relayIndices, fullProfile.length - 1];
+        const chainIds = [fromId, ...relayIds, toId];
+        const chainHeights = [from.antennaHeight, ...relayPoints.map(() => 10), to.antennaHeight];
+
         const segmentResults: ViewshedResult[] = [];
         const allNewResults: ViewshedResult[] = [];
 
-        for (let i = 0; i < chain.length - 1; i++) {
-          const segFrom = chain[i];
-          const segTo = chain[i + 1];
-          const segProfile = await getElevationProfile(segFrom.lat, segFrom.lng, segTo.lat, segTo.lng, 50);
+        for (let i = 0; i < chainIndices.length - 1; i++) {
+          const startIdx = chainIndices[i];
+          const endIdx = chainIndices[i + 1];
+          // Slice the original profile and re-base distances from 0
+          const sliced = fullProfile.slice(startIdx, endIdx + 1);
+          const baseDistance = sliced[0].distance;
+          const segProfile = sliced.map((p) => ({
+            ...p,
+            distance: p.distance - baseDistance,
+          }));
 
-          if (segProfile.length > 0) {
-            const segLos = calculateLineOfSight(segProfile, segFrom.antennaHeight, segTo.antennaHeight);
-            const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, segFrom.antennaHeight, segTo.antennaHeight);
+          if (segProfile.length >= 2) {
+            const segLos = calculateLineOfSight(segProfile, chainHeights[i], chainHeights[i + 1]);
+            const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, chainHeights[i], chainHeights[i + 1]);
             const segResult: ViewshedResult = {
-              fromId: segFrom.id,
-              toId: segTo.id,
+              fromId: chainIds[i],
+              toId: chainIds[i + 1],
               visible: segLos.visible,
               elevationProfile: segProfile,
               losLine: segLos.losLine,
