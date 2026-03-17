@@ -237,6 +237,7 @@ export default function Index() {
           isPlacing={isPlacing}
           onMapClick={handleMapClick}
           onPointDrag={handlePointDrag}
+          onSuggestionClick={handleSuggestionClick}
           centerOn={centerOn}
         />
 
