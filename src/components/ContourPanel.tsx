@@ -21,6 +21,7 @@ interface ContourPanelProps {
   onGenerate: () => void;
   onClear: () => void;
   onExportGeoJSON: () => void;
+  onExportPNG: () => void;
   onIntervalChange: (interval: number) => void;
   onResolutionChange: (res: number) => void;
   onShowLabelsChange: (show: boolean) => void;
@@ -43,6 +44,7 @@ export default function ContourPanel({
   onGenerate,
   onClear,
   onExportGeoJSON,
+  onExportPNG,
   onIntervalChange,
   onResolutionChange,
   onShowLabelsChange,
@@ -180,11 +182,16 @@ export default function ContourPanel({
         </Button>
 
         {hasContours && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={onExportGeoJSON}>
-              <Download className="h-3 w-3 mr-1" /> Export GeoJSON
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-8 text-destructive" onClick={onClear}>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={onExportGeoJSON}>
+                <Download className="h-3 w-3 mr-1" /> GeoJSON
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={onExportPNG}>
+                <Download className="h-3 w-3 mr-1" /> PNG
+              </Button>
+            </div>
+            <Button size="sm" variant="outline" className="w-full text-xs h-8 text-destructive" onClick={onClear}>
               Effacer
             </Button>
           </div>
