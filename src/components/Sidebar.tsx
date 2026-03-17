@@ -426,7 +426,7 @@ export default function Sidebar({
       ) : (
         <div className="flex-1 overflow-y-auto p-3">
           <ContourPanel
-            isDrawing={contourConfig.isDrawing}
+            isDrawing={contourConfig?.isDrawing ?? false}
             isGenerating={contourConfig.isGenerating}
             hasSelection={contourConfig.hasSelection}
             hasContours={contourConfig.hasContours}
