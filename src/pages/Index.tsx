@@ -188,12 +188,15 @@ export default function Index() {
           }
         }
 
-        setViewshedResults([directResult, ...allNewResults]);
+        // Clear suggestions from direct result since relays are now placed
+        const resolvedDirect = { ...directResult, suggestions: [] };
+        // Only keep segment results on the map (not the blocked direct line)
+        setViewshedResults(allNewResults);
         const allVisible = segmentResults.every((s) => s.visible);
 
         setLinkAnalysis({
           sourceId: fromId, destId: toId,
-          directResult,
+          directResult: resolvedDirect,
           segmentResults,
           relayIds,
           complete: allVisible,
