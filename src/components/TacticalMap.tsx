@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { TacticalPoint, STATION_COLORS, STATION_LABELS, ViewshedResult } from '@/types/tactical';
+import { ContourLine } from '@/lib/contours';
 
 interface TacticalMapProps {
   points: TacticalPoint[];
@@ -11,6 +12,11 @@ interface TacticalMapProps {
   onPointDrag: (id: string, lat: number, lng: number) => void;
   onSuggestionClick: (lat: number, lng: number, elevation: number, fromId: string, toId: string) => void;
   centerOn: [number, number] | null;
+  // Contour props
+  contourDrawing: boolean;
+  onContourRectangle: (bounds: { north: number; south: number; east: number; west: number }) => void;
+  contourLines: ContourLine[];
+  showContourLabels: boolean;
 }
 
 export default function TacticalMap({
@@ -21,12 +27,19 @@ export default function TacticalMap({
   onPointDrag,
   onSuggestionClick,
   centerOn,
+  contourDrawing,
+  onContourRectangle,
+  contourLines,
+  showContourLabels,
 }: TacticalMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const linesRef = useRef<L.Polyline[]>([]);
   const suggestionsRef = useRef<L.Marker[]>([]);
+  const contourLayerRef = useRef<L.LayerGroup | null>(null);
+  const rectRef = useRef<L.Rectangle | null>(null);
+  const drawingRef = useRef(false);
 
   // Initialize map
   useEffect(() => {
