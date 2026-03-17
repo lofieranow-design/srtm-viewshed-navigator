@@ -443,6 +443,7 @@ export default function Sidebar({
               onGenerate={onContourGenerate}
               onClear={onContourClear}
               onExportGeoJSON={onContourExport}
+              onExportPNG={onContourExportPNG}
               onIntervalChange={onContourIntervalChange}
               onResolutionChange={onContourResolutionChange}
               onShowLabelsChange={onContourShowLabelsChange}
