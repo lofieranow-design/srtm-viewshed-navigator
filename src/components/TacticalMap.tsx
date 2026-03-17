@@ -150,8 +150,8 @@ export default function TacticalMap({
       if (!result.visible && result.suggestions) {
         result.suggestions.forEach((s, i) => {
           const icon = L.divIcon({
-            className: 'custom-marker',
-            html: `<svg viewBox="0 0 32 40" width="28" height="35"><polygon points="16,0 30,24 2,24" fill="#f59e0b" stroke="white" stroke-width="2.5"/><text x="16" y="19" text-anchor="middle" fill="white" font-size="13" font-weight="bold">${i + 1}</text><circle cx="16" cy="35" r="3" fill="#f59e0b" opacity="0.4"/></svg>`,
+            className: 'custom-marker suggestion-clickable',
+            html: `<svg viewBox="0 0 32 40" width="28" height="35" style="cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))"><polygon points="16,0 30,24 2,24" fill="#f59e0b" stroke="white" stroke-width="2.5"/><text x="16" y="19" text-anchor="middle" fill="white" font-size="13" font-weight="bold">${i + 1}</text><circle cx="16" cy="35" r="3" fill="#f59e0b" opacity="0.4"/></svg>`,
             iconSize: [28, 35],
             iconAnchor: [14, 35],
           });
@@ -166,12 +166,16 @@ export default function TacticalMap({
               <tr><td style="padding:4px 10px;font-weight:600;color:#64748b;">Longitude</td><td style="padding:4px 10px;">${s.lng.toFixed(5)}</td></tr>
               <tr style="background:#f8fafc;"><td style="padding:4px 10px;font-weight:600;color:#64748b;">Distance</td><td style="padding:4px 10px;">${(s.distance / 1000).toFixed(2)} km</td></tr>
               <tr><td colspan="2" style="padding:6px 10px;font-style:italic;color:#92400e;font-size:11px;">${s.reason}</td></tr>
+              <tr><td colspan="2" style="padding:6px 10px;text-align:center;"><strong style="color:#f59e0b;font-size:11px;">🖱️ Cliquez pour placer un relais ici</strong></td></tr>
             </table>`;
           marker.bindTooltip(tooltipHtml, {
             direction: 'top',
             offset: [0, -35],
             opacity: 1,
             className: 'station-tooltip',
+          });
+          marker.on('click', () => {
+            onSuggestionClick(s.lat, s.lng, s.elevation, result.fromId, result.toId);
           });
           suggestionsRef.current.push(marker);
         });
