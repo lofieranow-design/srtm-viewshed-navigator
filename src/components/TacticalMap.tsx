@@ -49,7 +49,7 @@ export default function TacticalMap({
   // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current).setView([36.75, 3.06], 10);
+    const map = L.map(containerRef.current, { attributionControl: false }).setView([36.75, 3.06], 10);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
