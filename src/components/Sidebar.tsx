@@ -353,7 +353,7 @@ export default function Sidebar({
             width={40}
             height={40}
             loading="lazy"
-            className="h-10 w-10 object-contain shrink-0"
+            className="h-10 w-10 object-contain shrink-0 brightness-0 invert"
           />
           <div className="min-w-0">
             <h1 className="text-lg font-bold text-sidebar-foreground leading-tight">SRTM</h1>
