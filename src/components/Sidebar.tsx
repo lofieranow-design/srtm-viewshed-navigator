@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TacticalPoint, StationType, STATION_LABELS, STATION_COLORS, ViewshedResult } from '@/types/tactical';
 import ContourPanel from './ContourPanel';
-import logo from '@/assets/logo.png';
+
 
 const STEPS = [
   { title: 'Bienvenue', icon: Navigation, description: 'Introduction à l\'analyse terrain' },
@@ -346,20 +346,8 @@ export default function Sidebar({
     <div className="flex h-full w-80 flex-col border-r border-border bg-card">
       {/* Header */}
       <div className="border-b border-border bg-sidebar p-4">
-        <div className="flex items-center gap-3">
-          <img
-            src={logo}
-            alt="Logo SRTM"
-            width={40}
-            height={40}
-            loading="lazy"
-            className="h-10 w-10 object-contain shrink-0 brightness-0 invert"
-          />
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold text-sidebar-foreground leading-tight">SRTM</h1>
-            <p className="text-xs text-sidebar-foreground/60 mt-0.5 truncate">Visibilité Radio & Courbes de niveau</p>
-          </div>
-        </div>
+        <h1 className="text-lg font-bold text-sidebar-foreground leading-tight">SRTM</h1>
+        <p className="text-xs text-sidebar-foreground/60 mt-0.5">Visibilité Radio & Courbes de niveau</p>
       </div>
 
       {/* Tab selector */}
