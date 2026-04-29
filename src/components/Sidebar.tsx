@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TacticalPoint, StationType, STATION_LABELS, STATION_COLORS, ViewshedResult } from '@/types/tactical';
 import ContourPanel from './ContourPanel';
-import logo from '@/assets/logo.png';
+
 
 const STEPS = [
   { title: 'Bienvenue', icon: Navigation, description: 'Introduction à l\'analyse terrain' },
