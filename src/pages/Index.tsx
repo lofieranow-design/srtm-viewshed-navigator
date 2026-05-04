@@ -15,6 +15,7 @@ export default function Index() {
   const [points, setPoints] = useState<TacticalPoint[]>([]);
   const [isPlacing, setIsPlacing] = useState(false);
   const [placingType, setPlacingType] = useState<StationType>('pc_principal');
+  const [placingRemaining, setPlacingRemaining] = useState(0);
   const [viewshedResults, setViewshedResults] = useState<ViewshedResult[]>([]);
   const [linkAnalysis, setLinkAnalysis] = useState<LinkAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -34,13 +35,15 @@ export default function Index() {
   const [geoTIFFGrid, setGeoTIFFGrid] = useState<ElevationGrid | null>(null);
 
   // === Terrain analysis handlers ===
-  const handleStartPlacing = useCallback((type: StationType) => {
+  const handleStartPlacing = useCallback((type: StationType, count: number = 1) => {
     setPlacingType(type);
+    setPlacingRemaining(count);
     setIsPlacing(true);
   }, []);
 
   const handleCancelPlacing = useCallback(() => {
     setIsPlacing(false);
+    setPlacingRemaining(0);
   }, []);
 
   const handleMapClick = useCallback(
@@ -55,10 +58,17 @@ export default function Index() {
         antennaHeight: 10,
       };
       setPoints((prev) => [...prev, newPoint]);
-      setIsPlacing(false);
-      toast({ title: 'Point placé', description: `${newPoint.name} ajouté à la carte.` });
+
+      const newRemaining = placingRemaining - 1;
+      if (newRemaining <= 0) {
+        setIsPlacing(false);
+        setPlacingRemaining(0);
+      } else {
+        setPlacingRemaining(newRemaining);
+      }
+      toast({ title: 'Point placé', description: `${newPoint.name} ajouté à la carte.${newRemaining > 0 ? ` (${newRemaining} restant${newRemaining > 1 ? 's' : ''})` : ''}` });
     },
-    [isPlacing, placingType, points]
+    [isPlacing, placingType, points, placingRemaining]
   );
 
   const handleDeletePoint = useCallback((id: string) => {
@@ -355,6 +365,7 @@ export default function Index() {
         viewshedResults={viewshedResults}
         isPlacing={isPlacing}
         placingType={placingType}
+        placingRemaining={placingRemaining}
         onStartPlacing={handleStartPlacing}
         onCancelPlacing={handleCancelPlacing}
         onDeletePoint={handleDeletePoint}
