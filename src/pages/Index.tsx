@@ -58,10 +58,17 @@ export default function Index() {
         antennaHeight: 10,
       };
       setPoints((prev) => [...prev, newPoint]);
-      setIsPlacing(false);
-      toast({ title: 'Point placé', description: `${newPoint.name} ajouté à la carte.` });
+
+      const newRemaining = placingRemaining - 1;
+      if (newRemaining <= 0) {
+        setIsPlacing(false);
+        setPlacingRemaining(0);
+      } else {
+        setPlacingRemaining(newRemaining);
+      }
+      toast({ title: 'Point placé', description: `${newPoint.name} ajouté à la carte.${newRemaining > 0 ? ` (${newRemaining} restant${newRemaining > 1 ? 's' : ''})` : ''}` });
     },
-    [isPlacing, placingType, points]
+    [isPlacing, placingType, points, placingRemaining]
   );
 
   const handleDeletePoint = useCallback((id: string) => {
