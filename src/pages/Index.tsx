@@ -35,13 +35,15 @@ export default function Index() {
   const [geoTIFFGrid, setGeoTIFFGrid] = useState<ElevationGrid | null>(null);
 
   // === Terrain analysis handlers ===
-  const handleStartPlacing = useCallback((type: StationType) => {
+  const handleStartPlacing = useCallback((type: StationType, count: number = 1) => {
     setPlacingType(type);
+    setPlacingRemaining(count);
     setIsPlacing(true);
   }, []);
 
   const handleCancelPlacing = useCallback(() => {
     setIsPlacing(false);
+    setPlacingRemaining(0);
   }, []);
 
   const handleMapClick = useCallback(
