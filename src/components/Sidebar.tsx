@@ -32,7 +32,8 @@ interface SidebarProps {
   viewshedResults: ViewshedResult[];
   isPlacing: boolean;
   placingType: StationType;
-  onStartPlacing: (type: StationType) => void;
+  placingRemaining: number;
+  onStartPlacing: (type: StationType, count?: number) => void;
   onCancelPlacing: () => void;
   onDeletePoint: (id: string) => void;
   onUpdatePoint: (id: string, updates: Partial<TacticalPoint>) => void;
