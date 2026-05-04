@@ -61,6 +61,7 @@ export default function Sidebar({
   viewshedResults,
   isPlacing,
   placingType,
+  placingRemaining,
   onStartPlacing,
   onCancelPlacing,
   onDeletePoint,
