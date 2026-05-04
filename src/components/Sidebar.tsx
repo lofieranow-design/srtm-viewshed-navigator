@@ -129,37 +129,54 @@ export default function Sidebar({
       case 1:
         return (
           <div className="space-y-4 p-1">
-            <div className="flex gap-2">
-              <Select value={selectedType} onValueChange={(v) => setSelectedType(v as StationType)}>
-                <SelectTrigger className="flex-1 h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(STATION_LABELS) as StationType[]).map((t) => (
-                    <SelectItem key={t} value={t}>
-                      <span className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: STATION_COLORS[t] }} />
-                        {STATION_LABELS[t]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Type selector */}
+            <Select value={selectedType} onValueChange={(v) => setSelectedType(v as StationType)}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(STATION_LABELS) as StationType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: STATION_COLORS[t] }} />
+                      {STATION_LABELS[t]}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Count + Place button */}
+            <div className="flex gap-2 items-center">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">Nombre :</label>
+              <Input
+                type="number"
+                value={placingCount}
+                onChange={(e) => setPlacingCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                className="h-9 w-16 text-xs"
+                min={1} max={20}
+                disabled={isPlacing}
+              />
               {isPlacing ? (
-                <Button size="sm" variant="destructive" onClick={onCancelPlacing} className="text-xs h-9">
+                <Button size="sm" variant="destructive" onClick={onCancelPlacing} className="text-xs h-9 flex-1">
                   Annuler
                 </Button>
               ) : (
-                <Button size="sm" onClick={() => onStartPlacing(selectedType)} className="text-xs h-9">
+                <Button size="sm" onClick={() => onStartPlacing(selectedType, placingCount)} className="text-xs h-9 flex-1">
                   <Plus className="h-3 w-3 mr-1" /> Placer
                 </Button>
               )}
             </div>
 
             {isPlacing && (
-              <p className="text-xs text-primary animate-pulse">
-                👆 Cliquez sur la carte pour placer {STATION_LABELS[placingType]}
-              </p>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 space-y-1">
+                <p className="text-xs text-primary font-medium animate-pulse">
+                  👆 Cliquez sur la carte pour placer {STATION_LABELS[placingType]}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {placingRemaining} point{placingRemaining > 1 ? 's' : ''} restant{placingRemaining > 1 ? 's' : ''} à placer
+                </p>
+              </div>
             )}
 
             <div className="space-y-2">
