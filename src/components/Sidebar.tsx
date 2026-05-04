@@ -86,6 +86,7 @@ export default function Sidebar({
   const [activeTab, setActiveTab] = useState<'terrain' | 'contours'>('terrain');
   const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState<StationType>('pc_principal');
+  const [placingCount, setPlacingCount] = useState(1);
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
 
