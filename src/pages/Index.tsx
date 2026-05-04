@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import ElevationProfile from '@/components/ElevationProfile';
 import { toast } from '@/hooks/use-toast';
 
-let idCounter = 0;
+let idCounter = 0; // counter for unique point IDs
 
 export default function Index() {
   const [points, setPoints] = useState<TacticalPoint[]>([]);
