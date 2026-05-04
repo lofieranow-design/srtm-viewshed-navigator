@@ -365,6 +365,7 @@ export default function Index() {
         viewshedResults={viewshedResults}
         isPlacing={isPlacing}
         placingType={placingType}
+        placingRemaining={placingRemaining}
         onStartPlacing={handleStartPlacing}
         onCancelPlacing={handleCancelPlacing}
         onDeletePoint={handleDeletePoint}
