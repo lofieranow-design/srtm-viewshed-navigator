@@ -15,6 +15,7 @@ export default function Index() {
   const [points, setPoints] = useState<TacticalPoint[]>([]);
   const [isPlacing, setIsPlacing] = useState(false);
   const [placingType, setPlacingType] = useState<StationType>('pc_principal');
+  const [placingRemaining, setPlacingRemaining] = useState(0);
   const [viewshedResults, setViewshedResults] = useState<ViewshedResult[]>([]);
   const [linkAnalysis, setLinkAnalysis] = useState<LinkAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
