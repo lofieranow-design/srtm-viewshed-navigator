@@ -6,6 +6,7 @@ interface ElevationProfileProps {
   linkAnalysis: LinkAnalysis | null;
   points: TacticalPoint[];
   onClose: () => void;
+  hoveredLinePoint?: { lat: number; lng: number; distance: number } | null;
 }
 
 function ProfileChart({
@@ -15,6 +16,7 @@ function ProfileChart({
   visible,
   suggestions,
   relayMarkers,
+  hoveredDistance,
 }: {
   label: string;
   profile: { distance: number; elevation: number }[];
@@ -22,6 +24,7 @@ function ProfileChart({
   visible: boolean;
   suggestions?: { distance: number; elevation: number }[];
   relayMarkers?: { distance: number; elevation: number; name: string }[];
+  hoveredDistance?: number | null;
 }) {
   if (profile.length === 0) return null;
 
@@ -72,6 +75,21 @@ function ProfileChart({
     }
   }
 
+  // Find hovered point elevation
+  let hoveredElev: number | null = null;
+  let hoveredX: number | null = null;
+  if (hoveredDistance != null && hoveredDistance >= 0 && hoveredDistance <= maxDist) {
+    hoveredX = toX(hoveredDistance);
+    // Interpolate elevation from profile
+    for (let i = 0; i < profile.length - 1; i++) {
+      if (hoveredDistance >= profile[i].distance && hoveredDistance <= profile[i + 1].distance) {
+        const t = (hoveredDistance - profile[i].distance) / (profile[i + 1].distance - profile[i].distance);
+        hoveredElev = profile[i].elevation + t * (profile[i + 1].elevation - profile[i].elevation);
+        break;
+      }
+    }
+  }
+
   return (
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 mb-1">
@@ -83,7 +101,6 @@ function ProfileChart({
       <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-[120px]">
         <path d={terrainFill} fill="hsl(142, 71%, 45%)" opacity={0.15} />
         <path d={terrainPath} fill="none" stroke="hsl(142, 71%, 45%)" strokeWidth="1.5" />
-        {/* Obstacle zones (zone d'ombre) */}
         {obstacleZones.map((z, i) => (
           <path key={`obs-${i}`} d={z} fill="hsl(0, 84%, 60%)" opacity={0.25} />
         ))}
@@ -94,7 +111,6 @@ function ProfileChart({
           strokeWidth="1.5"
           strokeDasharray={visible ? '' : '5 3'}
         />
-        {/* Suggestion markers */}
         {suggestions?.map((s, i) => {
           const sx = toX(s.distance);
           const sy = toY(s.elevation);
@@ -106,7 +122,6 @@ function ProfileChart({
             </g>
           );
         })}
-        {/* Relay markers on multi-hop profile */}
         {relayMarkers?.map((r, i) => {
           const rx = toX(r.distance);
           const ry = toY(r.elevation);
@@ -118,6 +133,16 @@ function ProfileChart({
             </g>
           );
         })}
+        {/* Hover indicator */}
+        {hoveredX != null && hoveredElev != null && (
+          <g>
+            <line x1={hoveredX} y1={0} x2={hoveredX} y2={chartH} stroke="hsl(0, 0%, 100%)" strokeWidth="1" strokeDasharray="3 2" opacity={0.8} />
+            <circle cx={hoveredX} cy={toY(hoveredElev)} r="4" fill="hsl(45, 100%, 60%)" stroke="white" strokeWidth="1.5" />
+            <text x={hoveredX} y={toY(hoveredElev) - 8} textAnchor="middle" fill="white" fontSize="7" fontWeight="bold">
+              {hoveredElev.toFixed(0)}m
+            </text>
+          </g>
+        )}
         {/* Start/End markers */}
         <circle cx={toX(0)} cy={toY(profile[0].elevation)} r="3.5" fill="hsl(217, 91%, 60%)" />
         <circle cx={toX(maxDist)} cy={toY(profile[profile.length - 1].elevation)} r="3.5" fill="hsl(217, 91%, 60%)" />
@@ -131,7 +156,7 @@ function ProfileChart({
   );
 }
 
-export default function ElevationProfile({ linkAnalysis, points, onClose }: ElevationProfileProps) {
+export default function ElevationProfile({ linkAnalysis, points, onClose, hoveredLinePoint }: ElevationProfileProps) {
   if (!linkAnalysis) return null;
 
   const { directResult, segmentResults, relayIds, complete } = linkAnalysis;
@@ -150,21 +175,19 @@ export default function ElevationProfile({ linkAnalysis, points, onClose }: Elev
     segmentResults.forEach((seg, idx) => {
       const segProfile = seg.elevationProfile;
       if (segProfile.length === 0) return;
-      const startIdx = idx === 0 ? 0 : 1; // skip first point of subsequent segments (it's the relay)
+      const startIdx = idx === 0 ? 0 : 1;
       for (let i = startIdx; i < segProfile.length; i++) {
         combinedProfile.push({
           distance: segProfile[i].distance + distOffset,
           elevation: segProfile[i].elevation,
         });
       }
-      // LOS for this segment
       for (let i = startIdx; i < seg.losLine.length; i++) {
         combinedLos.push({
           distance: seg.losLine[i].distance + distOffset,
           elevation: seg.losLine[i].elevation,
         });
       }
-      // Mark relay at segment boundary
       if (idx < segmentResults.length - 1) {
         const lastPt = segProfile[segProfile.length - 1];
         const relayPoint = points.find((p) => p.id === relayIds[idx]);
@@ -181,6 +204,9 @@ export default function ElevationProfile({ linkAnalysis, points, onClose }: Elev
   const hasMultiHop = segmentResults.length > 0;
   const allSegmentsVisible = segmentResults.every((s) => s.visible);
 
+  // Compute hovered distance for chart
+  const hoveredDist = hoveredLinePoint?.distance ?? null;
+
   return (
     <div className="absolute bottom-0 left-0 right-0 bg-card border-t border-border p-3 shadow-lg z-[1000]">
       <div className="flex items-center justify-between mb-2">
@@ -195,16 +221,15 @@ export default function ElevationProfile({ linkAnalysis, points, onClose }: Elev
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Left: Direct link with obstacles */}
         <ProfileChart
           label={`Liaison directe — ${source?.name} → ${dest?.name}`}
           profile={directResult.elevationProfile}
           losLine={directResult.losLine}
           visible={directResult.visible}
           suggestions={directResult.visible ? undefined : directResult.suggestions}
+          hoveredDistance={hoveredDist}
         />
 
-        {/* Arrow */}
         {hasMultiHop && (
           <div className="flex flex-col items-center gap-1 px-2">
             <ArrowRight className="h-6 w-6 text-primary" />
@@ -214,7 +239,6 @@ export default function ElevationProfile({ linkAnalysis, points, onClose }: Elev
           </div>
         )}
 
-        {/* Right: Multi-hop resolved path */}
         {hasMultiHop && combinedProfile.length > 0 && (
           <ProfileChart
             label={`Via relais — ${[source?.name, ...relayIds.map((id) => points.find((p) => p.id === id)?.name || '?'), dest?.name].join(' → ')}`}
