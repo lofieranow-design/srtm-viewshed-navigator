@@ -12,13 +12,12 @@ interface TacticalMapProps {
   onPointDrag: (id: string, lat: number, lng: number) => void;
   onSuggestionClick: (lat: number, lng: number, elevation: number, fromId: string, toId: string) => void;
   centerOn: [number, number] | null;
-  // Contour props
   contourDrawing: boolean;
   onContourRectangle: (bounds: { north: number; south: number; east: number; west: number }) => void;
   contourLines: ContourLine[];
   showContourLabels: boolean;
-  // GeoTIFF overlay
   geoTIFFGrid: ElevationGrid | null;
+  onLineHover?: (point: { lat: number; lng: number; distance: number } | null) => void;
 }
 
 export default function TacticalMap({
@@ -34,6 +33,7 @@ export default function TacticalMap({
   contourLines,
   showContourLabels,
   geoTIFFGrid,
+  onLineHover,
 }: TacticalMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,6 +45,8 @@ export default function TacticalMap({
   const drawingRef = useRef(false);
   const geoTIFFOverlayRef = useRef<L.ImageOverlay | null>(null);
   const geoTIFFRectRef = useRef<L.Rectangle | null>(null);
+  const coordControlRef = useRef<L.Control | null>(null);
+  const hoveringMarkerRef = useRef(false);
 
   // Initialize map
   useEffect(() => {
@@ -59,6 +61,36 @@ export default function TacticalMap({
       attribution: '&copy; OpenTopoMap',
       opacity: 0.7,
     }).addTo(map);
+
+    // Coordinate display control
+    const CoordControl = L.Control.extend({
+      onAdd() {
+        const div = L.DomUtil.create('div', 'leaflet-coord-display');
+        div.style.cssText = 'background:rgba(0,0,0,0.75);color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;pointer-events:none;';
+        div.innerHTML = 'Lat: —, Lng: —';
+        return div;
+      },
+    });
+    const coordControl = new CoordControl({ position: 'bottomleft' });
+    coordControl.addTo(map);
+    coordControlRef.current = coordControl;
+
+    map.on('mousemove', (e: L.LeafletMouseEvent) => {
+      const container = coordControl.getContainer();
+      if (container) {
+        if (hoveringMarkerRef.current) {
+          container.style.display = 'none';
+        } else {
+          container.style.display = 'block';
+          container.innerHTML = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
+        }
+      }
+    });
+
+    map.on('mouseout', () => {
+      const container = coordControl.getContainer();
+      if (container) container.style.display = 'none';
+    });
 
     mapRef.current = map;
 
@@ -116,6 +148,9 @@ export default function TacticalMap({
           const pos = marker!.getLatLng();
           onPointDrag(point.id, pos.lat, pos.lng);
         });
+        // Hide coordinate display when hovering marker
+        marker.on('mouseover', () => { hoveringMarkerRef.current = true; });
+        marker.on('mouseout', () => { hoveringMarkerRef.current = false; });
         markersRef.current.set(point.id, marker);
       } else {
         marker.setLatLng([point.lat, point.lng]);
@@ -162,6 +197,30 @@ export default function TacticalMap({
           dashArray: result.visible ? undefined : '10 5',
         }
       ).addTo(map);
+
+      // Add hover event for visible lines to sync with elevation profile
+      if (result.visible && onLineHover && result.elevationProfile.length > 0) {
+        line.on('mouseover', () => { line.setStyle({ weight: 5 }); });
+        line.on('mouseout', () => {
+          line.setStyle({ weight: 3 });
+          onLineHover(null);
+        });
+        line.on('mousemove', (e: L.LeafletMouseEvent) => {
+          const mouseLatLng = e.latlng;
+          // Find closest profile point
+          let minDist = Infinity;
+          let closest = result.elevationProfile[0];
+          for (const pt of result.elevationProfile) {
+            const d = Math.pow(pt.lat - mouseLatLng.lat, 2) + Math.pow(pt.lng - mouseLatLng.lng, 2);
+            if (d < minDist) {
+              minDist = d;
+              closest = pt;
+            }
+          }
+          onLineHover({ lat: closest.lat, lng: closest.lng, distance: closest.distance });
+        });
+      }
+
       linesRef.current.push(line);
 
       // Add relay suggestion markers on obstacle peaks
@@ -199,7 +258,7 @@ export default function TacticalMap({
         });
       }
     });
-  }, [viewshedResults, points]);
+  }, [viewshedResults, points, onLineHover]);
 
   // Center on point
   useEffect(() => {
@@ -244,10 +303,8 @@ export default function TacticalMap({
         if (!startLatLng) return;
         const bounds = L.latLngBounds(startLatLng, e.latlng);
 
-        // Remove temp rect
         if (tempRect) tempRect.remove();
 
-        // Draw permanent rect
         if (rectRef.current) rectRef.current.remove();
         rectRef.current = L.rectangle(bounds, {
           color: '#2563eb',
@@ -262,7 +319,6 @@ export default function TacticalMap({
           west: bounds.getWest(),
         });
 
-        // Cleanup
         map.off('mousedown', onMouseDown);
         map.off('mousemove', onMouseMove);
         map.off('mouseup', onMouseUp);
@@ -303,7 +359,6 @@ export default function TacticalMap({
 
     if (contourLines.length === 0) return;
 
-    // Color scale based on elevation range
     const elevations = contourLines.map((c) => c.elevation);
     const minElev = Math.min(...elevations);
     const maxElev = Math.max(...elevations);
@@ -311,7 +366,6 @@ export default function TacticalMap({
 
     contourLines.forEach((contour) => {
       const t = (contour.elevation - minElev) / range;
-      // Green to brown gradient
       const r = Math.round(34 + t * 105);
       const g = Math.round(139 - t * 70);
       const b = Math.round(34);
@@ -329,7 +383,6 @@ export default function TacticalMap({
 
       polyline.addTo(contourLayerRef.current!);
 
-      // Add elevation labels
       if (showContourLabels && latlngs.length > 3) {
         const midIdx = Math.floor(latlngs.length / 2);
         const midPt = latlngs[midIdx];
@@ -352,7 +405,6 @@ export default function TacticalMap({
     const map = mapRef.current;
     if (!map) return;
 
-    // Cleanup previous overlay
     if (geoTIFFOverlayRef.current) {
       geoTIFFOverlayRef.current.remove();
       geoTIFFOverlayRef.current = null;
@@ -366,7 +418,6 @@ export default function TacticalMap({
 
     const { data, bounds, rows, cols, noDataValue } = geoTIFFGrid;
 
-    // Validate bounds are in geographic coordinates (lat/lng)
     if (
       Math.abs(bounds.north) > 90 || Math.abs(bounds.south) > 90 ||
       Math.abs(bounds.east) > 180 || Math.abs(bounds.west) > 180
@@ -375,7 +426,6 @@ export default function TacticalMap({
       return;
     }
 
-    // Find elevation range (excluding nodata)
     let minElev = Infinity;
     let maxElev = -Infinity;
     for (let r = 0; r < rows; r++) {
@@ -388,7 +438,6 @@ export default function TacticalMap({
     }
     const range = maxElev - minElev || 1;
 
-    // Render to canvas
     const canvas = document.createElement('canvas');
     canvas.width = cols;
     canvas.height = rows;
@@ -404,32 +453,27 @@ export default function TacticalMap({
           imageData.data[idx] = 0;
           imageData.data[idx + 1] = 0;
           imageData.data[idx + 2] = 0;
-          imageData.data[idx + 3] = 0; // transparent
+          imageData.data[idx + 3] = 0;
           continue;
         }
 
         const t = (v - minElev) / range;
-        // Terrain color ramp: blue (low) → green → yellow → brown → white (high)
         let rr: number, gg: number, bb: number;
         if (t < 0.2) {
-          // Deep green to light green
           rr = Math.round(34 + t * 5 * 100);
           gg = Math.round(120 + t * 5 * 60);
           bb = Math.round(50);
         } else if (t < 0.5) {
-          // Green to yellow
           const tt = (t - 0.2) / 0.3;
           rr = Math.round(134 + tt * 121);
           gg = Math.round(180 + tt * 40);
           bb = Math.round(50 - tt * 20);
         } else if (t < 0.8) {
-          // Yellow to brown
           const tt = (t - 0.5) / 0.3;
           rr = Math.round(255 - tt * 116);
           gg = Math.round(220 - tt * 120);
           bb = Math.round(30 + tt * 20);
         } else {
-          // Brown to white (snow)
           const tt = (t - 0.8) / 0.2;
           rr = Math.round(139 + tt * 116);
           gg = Math.round(100 + tt * 155);
@@ -439,12 +483,11 @@ export default function TacticalMap({
         imageData.data[idx] = rr;
         imageData.data[idx + 1] = gg;
         imageData.data[idx + 2] = bb;
-        imageData.data[idx + 3] = 180; // semi-transparent
+        imageData.data[idx + 3] = 180;
       }
     }
     ctx.putImageData(imageData, 0, 0);
 
-    // Create image overlay
     const imgUrl = canvas.toDataURL();
     const leafletBounds = L.latLngBounds(
       [bounds.south, bounds.west],
@@ -456,7 +499,6 @@ export default function TacticalMap({
       interactive: false,
     }).addTo(map);
 
-    // Add border rectangle
     geoTIFFRectRef.current = L.rectangle(leafletBounds, {
       color: '#2563eb',
       weight: 2,
@@ -464,7 +506,6 @@ export default function TacticalMap({
       dashArray: '6 4',
     }).addTo(map);
 
-    // Fit map to GeoTIFF bounds
     map.fitBounds(leafletBounds, { padding: [30, 30] });
   }, [geoTIFFGrid]);
 
