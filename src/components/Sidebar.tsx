@@ -33,7 +33,7 @@ interface SidebarProps {
   isPlacing: boolean;
   placingType: StationType;
   placingRemaining: number;
-  onStartPlacing: (type: StationType, count?: number) => void;
+  onStartPlacing: (type: StationType, count?: number, customName?: string) => void;
   onCancelPlacing: () => void;
   onDeletePoint: (id: string) => void;
   onUpdatePoint: (id: string, updates: Partial<TacticalPoint>) => void;
@@ -87,6 +87,7 @@ export default function Sidebar({
   const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState<StationType>('pc_principal');
   const [placingCount, setPlacingCount] = useState(1);
+  const [customName, setCustomName] = useState('');
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
 
@@ -146,6 +147,18 @@ export default function Sidebar({
               </SelectContent>
             </Select>
 
+            {/* Custom name */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Nom personnalisé (optionnel)</label>
+              <Input
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="Ex: ST1, Alpha, Base..."
+                className="h-9 text-xs"
+                disabled={isPlacing}
+              />
+            </div>
+
             {/* Count + Place button */}
             <div className="flex gap-2 items-center">
               <label className="text-xs text-muted-foreground whitespace-nowrap">Nombre :</label>
@@ -162,7 +175,7 @@ export default function Sidebar({
                   Annuler
                 </Button>
               ) : (
-                <Button size="sm" onClick={() => onStartPlacing(selectedType, placingCount)} className="text-xs h-9 flex-1">
+                <Button size="sm" onClick={() => onStartPlacing(selectedType, placingCount, customName || undefined)} className="text-xs h-9 flex-1">
                   <Plus className="h-3 w-3 mr-1" /> Placer
                 </Button>
               )}

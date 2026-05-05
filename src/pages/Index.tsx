@@ -16,10 +16,13 @@ export default function Index() {
   const [isPlacing, setIsPlacing] = useState(false);
   const [placingType, setPlacingType] = useState<StationType>('pc_principal');
   const [placingRemaining, setPlacingRemaining] = useState(0);
+  const [placingCustomName, setPlacingCustomName] = useState<string | undefined>(undefined);
+  const [placingIndex, setPlacingIndex] = useState(0);
   const [viewshedResults, setViewshedResults] = useState<ViewshedResult[]>([]);
   const [linkAnalysis, setLinkAnalysis] = useState<LinkAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [centerOn, setCenterOn] = useState<[number, number] | null>(null);
+  const [hoveredLinePoint, setHoveredLinePoint] = useState<{ lat: number; lng: number; distance: number } | null>(null);
   const pointsRef = useRef(points);
   pointsRef.current = points;
 
@@ -35,40 +38,52 @@ export default function Index() {
   const [geoTIFFGrid, setGeoTIFFGrid] = useState<ElevationGrid | null>(null);
 
   // === Terrain analysis handlers ===
-  const handleStartPlacing = useCallback((type: StationType, count: number = 1) => {
+  const handleStartPlacing = useCallback((type: StationType, count: number = 1, customName?: string) => {
     setPlacingType(type);
     setPlacingRemaining(count);
+    setPlacingCustomName(customName);
+    setPlacingIndex(0);
     setIsPlacing(true);
   }, []);
 
   const handleCancelPlacing = useCallback(() => {
     setIsPlacing(false);
     setPlacingRemaining(0);
+    setPlacingCustomName(undefined);
+    setPlacingIndex(0);
   }, []);
 
   const handleMapClick = useCallback(
     (lat: number, lng: number) => {
       if (!isPlacing) return;
+      const currentIndex = placingIndex;
+      const baseName = placingCustomName
+        ? (placingRemaining + currentIndex > 1 ? `${placingCustomName} ${currentIndex + 1}` : placingCustomName)
+        : `${STATION_LABELS[placingType]} ${points.filter((p) => p.type === placingType).length + 1}`;
+
       const newPoint: TacticalPoint = {
         id: `point-${++idCounter}`,
-        name: `${STATION_LABELS[placingType]} ${points.filter((p) => p.type === placingType).length + 1}`,
+        name: baseName,
         type: placingType,
         lat,
         lng,
         antennaHeight: 10,
       };
       setPoints((prev) => [...prev, newPoint]);
+      setPlacingIndex((prev) => prev + 1);
 
       const newRemaining = placingRemaining - 1;
       if (newRemaining <= 0) {
         setIsPlacing(false);
         setPlacingRemaining(0);
+        setPlacingCustomName(undefined);
+        setPlacingIndex(0);
       } else {
         setPlacingRemaining(newRemaining);
       }
       toast({ title: 'Point placé', description: `${newPoint.name} ajouté à la carte.${newRemaining > 0 ? ` (${newRemaining} restant${newRemaining > 1 ? 's' : ''})` : ''}` });
     },
-    [isPlacing, placingType, points, placingRemaining]
+    [isPlacing, placingType, points, placingRemaining, placingCustomName, placingIndex]
   );
 
   const handleDeletePoint = useCallback((id: string) => {
@@ -92,8 +107,9 @@ export default function Index() {
 
   const handleRunViewshed = useCallback(
     async (fromId: string, toId: string) => {
-      const from = points.find((p) => p.id === fromId);
-      const to = points.find((p) => p.id === toId);
+      const currentPoints = pointsRef.current;
+      const from = currentPoints.find((p) => p.id === fromId);
+      const to = currentPoints.find((p) => p.id === toId);
       if (!from || !to) return;
 
       setIsAnalyzing(true);
@@ -132,87 +148,147 @@ export default function Index() {
           return;
         }
 
-        toast({ title: '❌ Obstacle détecté', description: 'Recherche du nombre minimal de relais...' });
-        const minRelays = findMinimalRelays(fullProfile, from.antennaHeight, to.antennaHeight, 5);
+        toast({ title: '❌ Obstacle détecté', description: 'Recherche de relais existants ou optimaux...' });
 
-        if (minRelays.length === 0) {
-          setLinkAnalysis({
-            sourceId: fromId, destId: toId,
-            directResult,
-            segmentResults: [directResult],
-            relayIds: [],
-            complete: false,
-          });
-          toast({ title: '❌ Aucun relais trouvé', variant: 'destructive' });
-          setIsAnalyzing(false);
-          return;
-        }
+        // --- REUSE EXISTING RELAYS ---
+        // Find existing relay points that lie approximately between source and destination
+        const existingRelays = currentPoints.filter((p) => {
+          if (p.id === fromId || p.id === toId) return false;
+          if (p.type !== 'relais') return false;
+          // Check if relay is roughly between from and to (within bounding box + margin)
+          const minLat = Math.min(from.lat, to.lat) - 0.05;
+          const maxLat = Math.max(from.lat, to.lat) + 0.05;
+          const minLng = Math.min(from.lng, to.lng) - 0.05;
+          const maxLng = Math.max(from.lng, to.lng) + 0.05;
+          return p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng;
+        });
 
-        const relayPoints: TacticalPoint[] = [];
-        const relayIds: string[] = [];
-        const existingRelayCount = pointsRef.current.filter((p) => p.type === 'relais').length;
+        // Sort existing relays by distance from source along the profile direction
+        const dx = to.lng - from.lng;
+        const dy = to.lat - from.lat;
+        const pathLen = Math.sqrt(dx * dx + dy * dy);
+        existingRelays.sort((a, b) => {
+          const projA = ((a.lng - from.lng) * dx + (a.lat - from.lat) * dy) / (pathLen * pathLen);
+          const projB = ((b.lng - from.lng) * dx + (b.lat - from.lat) * dy) / (pathLen * pathLen);
+          return projA - projB;
+        });
 
-        for (let i = 0; i < minRelays.length; i++) {
-          const r = minRelays[i];
-          const relayId = `point-${++idCounter}`;
-          const relayPoint: TacticalPoint = {
-            id: relayId,
-            name: `Relais ${existingRelayCount + i + 1}`,
-            type: 'relais',
-            lat: r.lat, lng: r.lng,
-            antennaHeight: 10,
-          };
-          relayPoints.push(relayPoint);
-          relayIds.push(relayId);
-        }
+        // Try to build a chain using existing relays
+        let chainBuiltWithExisting = false;
+        let usedRelayIds: string[] = [];
+        let segmentResults: ViewshedResult[] = [];
 
-        setPoints((prev) => [...prev, ...relayPoints]);
-        toast({ title: `📍 ${relayPoints.length} relais placé(s)` });
+        if (existingRelays.length > 0) {
+          // Try chain: source -> relay1 -> relay2 -> ... -> dest
+          const chainPoints = [from, ...existingRelays, to];
+          const chainIds = [fromId, ...existingRelays.map(r => r.id), toId];
+          const testSegments: ViewshedResult[] = [];
+          let allVisible = true;
 
-        const relayIndices = minRelays.map((r) => r.profileIndex);
-        const chainIndices = [0, ...relayIndices, fullProfile.length - 1];
-        const chainIds = [fromId, ...relayIds, toId];
-        const chainHeights = [from.antennaHeight, ...relayPoints.map(() => 10), to.antennaHeight];
-
-        const segmentResults: ViewshedResult[] = [];
-        const allNewResults: ViewshedResult[] = [];
-
-        for (let i = 0; i < chainIndices.length - 1; i++) {
-          const startIdx = chainIndices[i];
-          const endIdx = chainIndices[i + 1];
-          const sliced = fullProfile.slice(startIdx, endIdx + 1);
-          const baseDistance = sliced[0].distance;
-          const segProfile = sliced.map((p) => ({ ...p, distance: p.distance - baseDistance }));
-
-          if (segProfile.length >= 2) {
-            const segLos = calculateLineOfSight(segProfile, chainHeights[i], chainHeights[i + 1]);
-            const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, chainHeights[i], chainHeights[i + 1]);
-            const segResult: ViewshedResult = {
+          for (let i = 0; i < chainPoints.length - 1; i++) {
+            const segFrom = chainPoints[i];
+            const segTo = chainPoints[i + 1];
+            const segProfile = await getElevationProfile(segFrom.lat, segFrom.lng, segTo.lat, segTo.lng, 50);
+            if (segProfile.length < 2) { allVisible = false; break; }
+            const segLos = calculateLineOfSight(segProfile, segFrom.antennaHeight, segTo.antennaHeight);
+            testSegments.push({
               fromId: chainIds[i], toId: chainIds[i + 1],
               visible: segLos.visible,
               elevationProfile: segProfile,
               losLine: segLos.losLine,
-              suggestions: segSuggestions,
+              suggestions: [],
+            });
+            if (!segLos.visible) allVisible = false;
+          }
+
+          if (allVisible) {
+            chainBuiltWithExisting = true;
+            usedRelayIds = existingRelays.map(r => r.id);
+            segmentResults = testSegments;
+            toast({ title: `✅ Liaison établie via ${usedRelayIds.length} relais existant(s)` });
+          }
+        }
+
+        if (!chainBuiltWithExisting) {
+          // Fall back to finding new relays
+          const minRelays = findMinimalRelays(fullProfile, from.antennaHeight, to.antennaHeight, 5);
+
+          if (minRelays.length === 0) {
+            setLinkAnalysis({
+              sourceId: fromId, destId: toId,
+              directResult,
+              segmentResults: [directResult],
+              relayIds: [],
+              complete: false,
+            });
+            toast({ title: '❌ Aucun relais trouvé', variant: 'destructive' });
+            setIsAnalyzing(false);
+            return;
+          }
+
+          const relayPoints: TacticalPoint[] = [];
+          const relayIds: string[] = [];
+          const existingRelayCount = currentPoints.filter((p) => p.type === 'relais').length;
+
+          for (let i = 0; i < minRelays.length; i++) {
+            const r = minRelays[i];
+            const relayId = `point-${++idCounter}`;
+            const relayPoint: TacticalPoint = {
+              id: relayId,
+              name: `Relais ${existingRelayCount + i + 1}`,
+              type: 'relais',
+              lat: r.lat, lng: r.lng,
+              antennaHeight: 10,
             };
-            segmentResults.push(segResult);
-            allNewResults.push(segResult);
+            relayPoints.push(relayPoint);
+            relayIds.push(relayId);
+          }
+
+          setPoints((prev) => [...prev, ...relayPoints]);
+          toast({ title: `📍 ${relayPoints.length} relais placé(s)` });
+          usedRelayIds = relayIds;
+
+          const relayIndices = minRelays.map((r) => r.profileIndex);
+          const chainIndices = [0, ...relayIndices, fullProfile.length - 1];
+          const chainIds = [fromId, ...relayIds, toId];
+          const chainHeights = [from.antennaHeight, ...relayPoints.map(() => 10), to.antennaHeight];
+
+          segmentResults = [];
+          for (let i = 0; i < chainIndices.length - 1; i++) {
+            const startIdx = chainIndices[i];
+            const endIdx = chainIndices[i + 1];
+            const sliced = fullProfile.slice(startIdx, endIdx + 1);
+            const baseDistance = sliced[0].distance;
+            const segProfile = sliced.map((p) => ({ ...p, distance: p.distance - baseDistance }));
+
+            if (segProfile.length >= 2) {
+              const segLos = calculateLineOfSight(segProfile, chainHeights[i], chainHeights[i + 1]);
+              const segSuggestions = segLos.visible ? [] : suggestRelayPositions(segProfile, chainHeights[i], chainHeights[i + 1]);
+              segmentResults.push({
+                fromId: chainIds[i], toId: chainIds[i + 1],
+                visible: segLos.visible,
+                elevationProfile: segProfile,
+                losLine: segLos.losLine,
+                suggestions: segSuggestions,
+              });
+            }
           }
         }
 
         const resolvedDirect = { ...directResult, suggestions: [] };
-        setViewshedResults(allNewResults);
+        setViewshedResults(segmentResults);
 
         const allVisible = segmentResults.every((s) => s.visible);
         setLinkAnalysis({
           sourceId: fromId, destId: toId,
           directResult: resolvedDirect,
-          segmentResults, relayIds,
+          segmentResults, relayIds: usedRelayIds,
           complete: allVisible,
         });
 
         toast({
           title: allVisible ? '✅ Liaison établie' : '⚠️ Partiellement résolu',
-          description: allVisible ? `${relayIds.length} relais` : 'Certains segments bloqués',
+          description: allVisible ? `${usedRelayIds.length} relais` : 'Certains segments bloqués',
           variant: allVisible ? undefined : 'destructive',
         });
       } catch {
@@ -240,6 +316,10 @@ export default function Index() {
     setCenterOn([point.lat, point.lng]);
   }, []);
 
+  const handleLineHover = useCallback((point: { lat: number; lng: number; distance: number } | null) => {
+    setHoveredLinePoint(point);
+  }, []);
+
   // === Contour handlers ===
   const handleContourRectangle = useCallback((bounds: { north: number; south: number; east: number; west: number }) => {
     setContourBounds(bounds);
@@ -254,7 +334,6 @@ export default function Index() {
       let grid: ElevationGrid;
 
       if (contourDataSource === 'geotiff' && geoTIFFGrid) {
-        // Clip GeoTIFF grid to selected bounds
         const { data, bounds, rows, cols, noDataValue } = geoTIFFGrid;
         const cellW = (bounds.east - bounds.west) / (cols - 1);
         const cellH = (bounds.north - bounds.south) / (rows - 1);
@@ -267,7 +346,6 @@ export default function Index() {
         const clippedRows = endRow - startRow + 1;
         const clippedCols = endCol - startCol + 1;
 
-        // Downsample if grid is too large (max ~200x200 for performance)
         const maxDim = 200;
         const stepR = clippedRows > maxDim ? Math.ceil(clippedRows / maxDim) : 1;
         const stepC = clippedCols > maxDim ? Math.ceil(clippedCols / maxDim) : 1;
@@ -345,10 +423,8 @@ export default function Index() {
     try {
       const grid = await parseGeoTIFF(file);
       setGeoTIFFGrid(grid);
-      // Auto-select the GeoTIFF extent as contour bounds
       setContourBounds(grid.bounds);
       setContourDrawing(false);
-      // Center map on GeoTIFF extent
       const centerLat = (grid.bounds.north + grid.bounds.south) / 2;
       const centerLng = (grid.bounds.east + grid.bounds.west) / 2;
       setCenterOn([centerLat, centerLng]);
@@ -412,12 +488,14 @@ export default function Index() {
           contourLines={contourLines}
           showContourLabels={showContourLabels}
           geoTIFFGrid={geoTIFFGrid}
+          onLineHover={handleLineHover}
         />
 
         <ElevationProfile
           linkAnalysis={linkAnalysis}
           points={points}
           onClose={() => setLinkAnalysis(null)}
+          hoveredLinePoint={hoveredLinePoint}
         />
       </div>
     </div>
